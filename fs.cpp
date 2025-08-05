@@ -5,8 +5,8 @@
 
 const int BLK_SIZE = 2;
 
-void write_block(std::string block) {
-  std::cout << "Block: " << block << "\n";
+int write_block(std::string block) {
+  // std::cout << "Block: " << block << "\n";
   // определить пустое место в memory
   // записать в него блок
   std::fstream file;
@@ -29,14 +29,14 @@ void write_block(std::string block) {
       int pos = (int)file.tellg() - BLK_SIZE;
       file.seekp(pos);
       file.write(block.c_str(), BLK_SIZE);
-      return; // или break, если нужно продолжить другие операции
-    }
+      file.close();
+      return pos;
+    };
   };
-
-  file.close();
+  return 0;
 }
 
-void write_file() {
+void write_file(std::string file_name) {
   // Читает из stdin и записывает в свободное место в memory
   std::string input;
   std::string whole_input;
@@ -47,10 +47,29 @@ void write_file() {
     blocks_cnt++;
   }
 
+  int first_position, None;
   for (int i = 0; i < blocks_cnt; ++i) {
     // whole_input[i * BLK_SIZE:(i+1) * BLK_SIZE]
-    write_block(whole_input.substr(i * BLK_SIZE, BLK_SIZE));
+    if (i == 0) {
+      first_position = write_block(whole_input.substr(i * BLK_SIZE, BLK_SIZE));
+      // std::cout << result << " ";
+    } else {
+      None = write_block(whole_input.substr(i * BLK_SIZE, BLK_SIZE));
+      // std::cout << None << " ";
+    }
   }
+  // для FAT
+  std::cout << " " << first_position << " " << blocks_cnt << " "
+            << first_position + blocks_cnt * BLK_SIZE;
+
+  std::fstream FAT;
+
+  FAT.open("FAT", std::ios::out | std::ios::app);
+
+  std::string fat_write_text =
+      file_name + "[" + std::to_string(first_position) + "," +
+      std::to_string(first_position + blocks_cnt * BLK_SIZE) + "]" + "\n";
+  FAT.write(fat_write_text.c_str(), fat_write_text.length());
 }
 
 int main(int argc, char *argv[]) {
@@ -60,7 +79,9 @@ int main(int argc, char *argv[]) {
   }
 
   if (!strcmp(argv[1], "write")) {
-    write_file();
+    if (argc == 3) {
+      write_file(argv[2]);
+    }
   } else {
     std::cerr << "Invalid usage, no such command" << std::endl;
     return 1;
