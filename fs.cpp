@@ -19,6 +19,56 @@ int write_block(std::string block, long long pos_start) {
   return pos_start;
 }
 
+long long get_number_start_free_memory() {
+  std::fstream FAT("FAT");
+  std::string first_line;
+  std::getline(FAT, first_line);
+  size_t commaPos = first_line.find(',');
+  std::string number_start_free_memoryStr = first_line.substr(0, commaPos);
+  long long number_start_free_memory = 0;
+  std::istringstream iss(number_start_free_memoryStr);
+  iss >> number_start_free_memory;
+  std::cout << "first number in FAT:" << number_start_free_memory << std::endl;
+  FAT.close();
+  return number_start_free_memory;
+}
+
+void write_info_into_FAT(int first_position, long long number_start_free_memory,
+                         std::string file_name, int blocks_cnt) {
+  // std::cout << first_position << number_start_free_memory << file_name <<
+  // blocks_cnt << std::endl;
+  std::cout << "end write blocks" << std::endl;
+  // для FAT
+  std::fstream FAT;
+  FAT.open("FAT");
+  std::string line;
+  std::getline(FAT, line);
+  size_t comma_pos = line.find(',');
+  if (comma_pos == std::string::npos || line.empty()) {
+    // Обработка ошибки - запятая не найдена или строка пустая
+    std::cerr << "Error: invalid format in FAT first line (no comma found or "
+                 "empty line)"
+              << std::endl;
+    return;
+  }
+  std::string new_line =
+      std::to_string(number_start_free_memory) + line.substr(comma_pos);
+  FAT.seekp(0);
+  FAT << new_line;
+  std::cout << new_line << std::endl;
+  std::cout << " " << first_position << " " << blocks_cnt << " "
+            << first_position + blocks_cnt * BLK_SIZE;
+  std::cout << "wtite new first line in FAT" << std::endl;
+
+  std::string fat_write_first_line_text =
+      "\n" + file_name + "[" + std::to_string(first_position) + "," +
+      std::to_string(first_position + blocks_cnt * BLK_SIZE) + "]";
+  FAT.seekp(0, std::ios::end);
+  FAT.write(fat_write_first_line_text.c_str(),
+            fat_write_first_line_text.length());
+  FAT.close();
+}
+
 void write_file(std::string file_name) {
   // Читает из stdin и записывает в свободное место в memory
   std::string input;
@@ -30,58 +80,25 @@ void write_file(std::string file_name) {
     blocks_cnt++;
   }
 
-  std::fstream FAT_first_line("FAT");
-  std::string first_line;
-  std::getline(FAT_first_line, first_line);
-  size_t commaPos = first_line.find(',');
-  std::string firstNumberStr = first_line.substr(0, commaPos);
-  long long firstNumber = 0;
-  std::istringstream iss(firstNumberStr);
-  iss >> firstNumber;
-  std::cout << "first number in FAT:" << firstNumber << std::endl;
-  FAT_first_line.close();
+  long long number_start_free_memory = get_number_start_free_memory();
 
   int first_position, None;
   for (int i = 0; i < blocks_cnt; ++i) {
     // whole_input[i * BLK_SIZE:(i+1) * BLK_SIZE]
     if (i == 0) {
-      first_position =
-          write_block(whole_input.substr(i * BLK_SIZE, BLK_SIZE), firstNumber);
-      firstNumber += BLK_SIZE;
+      first_position = write_block(whole_input.substr(i * BLK_SIZE, BLK_SIZE),
+                                   number_start_free_memory);
+      number_start_free_memory += BLK_SIZE;
       // std::cout << result << " ";
     } else {
-      None =
-          write_block(whole_input.substr(i * BLK_SIZE, BLK_SIZE), firstNumber);
-      firstNumber += BLK_SIZE;
+      None = write_block(whole_input.substr(i * BLK_SIZE, BLK_SIZE),
+                         number_start_free_memory);
+      number_start_free_memory += BLK_SIZE;
       // std::cout << None << " ";
     }
   }
-  std::cout << "end write blocks" << std::endl;
-  // для FAT
-  FAT_first_line.open("FAT");
-  std::string line;
-  std::getline(FAT_first_line, line);
-  size_t comma_pos = line.find(',');
-  if (comma_pos == std::string::npos || line.empty()) {
-    // Обработка ошибки - запятая не найдена или строка пустая
-    std::cerr << "Error: invalid format in FAT first line (no comma found or "
-                 "empty line)"
-              << std::endl;
-    return;
-  }
-  std::string new_line = std::to_string(firstNumber) + line.substr(comma_pos);
-  FAT_first_line.seekp(0);
-  FAT_first_line << new_line;
-  std::cout << new_line << std::endl;
-  std::cout << " " << first_position << " " << blocks_cnt << " "
-            << first_position + blocks_cnt * BLK_SIZE;
-  std::cout << "wtite new first line in FAT" << std::endl;
-
-  std::string fat_write_text =
-      file_name + "[" + std::to_string(first_position) + "," +
-      std::to_string(first_position + blocks_cnt * BLK_SIZE) + "]" + "\n";
-  FAT_first_line.write(fat_write_text.c_str(), fat_write_text.length());
-  FAT_first_line.close();
+  write_info_into_FAT(first_position, number_start_free_memory, file_name,
+                      blocks_cnt);
 }
 
 int main(int argc, char *argv[]) {
