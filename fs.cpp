@@ -39,6 +39,7 @@ void write_file(std::string file_name) {
   std::istringstream iss(firstNumberStr);
   iss >> firstNumber;
   std::cout << "first number in FAT:" << firstNumber << std::endl;
+  FAT_first_line.close();
 
   int first_position, None;
   for (int i = 0; i < blocks_cnt; ++i) {
@@ -57,6 +58,7 @@ void write_file(std::string file_name) {
   }
   std::cout << "end write blocks" << std::endl;
   // для FAT
+  FAT_first_line.open("FAT");
   std::string line;
   std::getline(FAT_first_line, line);
   size_t comma_pos = line.find(',');
@@ -65,13 +67,12 @@ void write_file(std::string file_name) {
     std::cerr << "Error: invalid format in FAT first line (no comma found or "
                  "empty line)"
               << std::endl;
-    // Можно выбросить исключение или выполнить другие действия по обработке
-    // ошибки
-    return; // или throw, или другое действие
+    return;
   }
   std::string new_line = std::to_string(firstNumber) + line.substr(comma_pos);
   FAT_first_line.seekp(0);
   FAT_first_line << new_line;
+  std::cout << new_line << std::endl;
   std::cout << " " << first_position << " " << blocks_cnt << " "
             << first_position + blocks_cnt * BLK_SIZE;
   std::cout << "wtite new first line in FAT" << std::endl;
@@ -91,8 +92,8 @@ int main(int argc, char *argv[]) {
   } else {
     // создание файла если не найден
     std::ofstream FAT;
-    FAT.open("FAT", std::ios::out | std::ios::trunc);
-    FAT.write("0,", 3);
+    FAT.open("FAT", std::ios::out);
+    FAT.write("0,", 2);
     std::cout << "FAT was created" << std::endl;
   }
   file.close();
