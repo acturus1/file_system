@@ -39,36 +39,31 @@ void write_info_into_FAT(int first_position, long long number_start_free_memory,
                          std::string file_name, int blocks_cnt) {
   std::cout << "end write blocks" << std::endl;
 
-  // 1. Открываем FAT для чтения и записи
   std::fstream FAT("FAT", std::ios::in | std::ios::out | std::ios::binary);
   if (!FAT.is_open()) {
     std::cerr << "Error: FAT file not opened!" << std::endl;
     return;
   }
 
-  // 2. Читаем ВСЁ содержимое FAT (кроме первой строки)
   std::string first_line;
-  std::getline(FAT, first_line); // Читаем и игнорируем старую первую строку
+  std::getline(FAT, first_line);
 
   std::stringstream rest_of_fat;
-  rest_of_fat << FAT.rdbuf(); // Сохраняем остальное содержимое
+  rest_of_fat << FAT.rdbuf();
 
-  // 3. Перезаписываем FAT с нуля
   FAT.close();
   FAT.open("FAT",
            std::ios::out | std::ios::trunc | std::ios::binary); // Очищаем файл
 
-  // 4. Записываем новую первую строку
-  std::string new_first_line = std::to_string(number_start_free_memory) + ",";
+  std::string new_first_line =
+      std::to_string(number_start_free_memory) + "," + "\n";
   FAT.write(new_first_line.c_str(), new_first_line.size());
 
-  // 5. Добавляем остальные данные обратно
   FAT << rest_of_fat.str();
 
-  // 6. Добавляем запись о новом файле
   std::string new_file_entry =
-      "\n" + file_name + "[" + std::to_string(first_position) + "," +
-      std::to_string(first_position + blocks_cnt * BLK_SIZE) + "]";
+      file_name + "[" + std::to_string(first_position) + "," +
+      std::to_string(first_position + blocks_cnt * BLK_SIZE) + "]" + "\n";
   FAT.write(new_file_entry.c_str(), new_file_entry.size());
 
   FAT.flush();
