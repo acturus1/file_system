@@ -51,12 +51,18 @@ void write_info_into_FAT(int first_position, long long number_start_free_memory,
   std::stringstream rest_of_fat;
   rest_of_fat << FAT.rdbuf();
 
-  FAT.close();
-  FAT.open("FAT",
-           std::ios::out | std::ios::trunc | std::ios::binary); // Очищаем файл
+  size_t comma_pos = first_line.find(',');
+  if (comma_pos == std::string::npos) {
+    std::cerr << "Error: No comma in first line!" << std::endl;
+    FAT.close();
+    return;
+  }
 
-  std::string new_first_line =
-      std::to_string(number_start_free_memory) + "," + "\n";
+  FAT.close();
+  FAT.open("FAT", std::ios::out | std::ios::trunc | std::ios::binary);
+
+  std::string new_first_line = std::to_string(number_start_free_memory) +
+                               first_line.substr(comma_pos) + "\n";
   FAT.write(new_first_line.c_str(), new_first_line.size());
 
   FAT << rest_of_fat.str();
