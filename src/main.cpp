@@ -6,9 +6,6 @@
 const int BLK_SIZE = 2;
 
 int write_block(std::string block) {
-  // std::cout << "Block: " << block << "\n";
-  // определить пустое место в memory
-  // записать в него блок
   std::fstream file;
   file.open("memory", std::ios::in | std::ios::out);
 
@@ -33,29 +30,39 @@ int write_block(std::string block) {
       return pos;
     };
   };
+
+  file.close();
   return 0;
+}
+
+int get_blocks_cnt(const std::string &str) {
+  int blocks_cnt = str.length() / BLK_SIZE;
+  if (str.length() % BLK_SIZE != 0) {
+    blocks_cnt++;
+  }
+  return blocks_cnt;
 }
 
 void write_file(std::string file_name) {
   // Читает из stdin и записывает в свободное место в memory
   std::string input;
   std::string whole_input;
-  std::getline(std::cin, whole_input);
-
-  int blocks_cnt = whole_input.length() / BLK_SIZE;
-  if (whole_input.length() % BLK_SIZE != 0) {
-    blocks_cnt++;
+  while (std::getline(std::cin, input)) {
+    if (!whole_input.empty()) {
+      whole_input += "\n";
+    }
+    whole_input += input;
   }
+
+  int blocks_cnt = get_blocks_cnt(whole_input);
 
   int first_position, None;
   for (int i = 0; i < blocks_cnt; ++i) {
     // whole_input[i * BLK_SIZE:(i+1) * BLK_SIZE]
     if (i == 0) {
       first_position = write_block(whole_input.substr(i * BLK_SIZE, BLK_SIZE));
-      // std::cout << result << " ";
     } else {
       None = write_block(whole_input.substr(i * BLK_SIZE, BLK_SIZE));
-      // std::cout << None << " ";
     }
   }
   // для FAT
@@ -81,9 +88,13 @@ int main(int argc, char *argv[]) {
   if (!strcmp(argv[1], "write")) {
     if (argc == 3) {
       write_file(argv[2]);
+    } else {
+      std::cerr << "Invalid usage, give a name of the file" << std::endl;
+      return 1;
     }
   } else {
-    std::cerr << "Invalid usage, no such command" << std::endl;
+    std::cerr << "Invalid usage, no such command\n"
+              << "Possible commands are: write <file_name>" << std::endl;
     return 1;
   }
 
