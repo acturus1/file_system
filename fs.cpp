@@ -38,33 +38,45 @@ long long get_number_start_free_memory() {
 void write_info_into_FAT(int first_position, long long number_start_free_memory,
                          std::string file_name, int blocks_cnt) {
   std::cout << "end write blocks" << std::endl;
-  std::fstream FAT;
-  FAT.open("FAT", std::ios::in | std::ios::out | std::ios::binary);
-  std::string line;
-  std::getline(FAT, line);
-  size_t comma_pos = line.find(',');
-  if (comma_pos == std::string::npos || line.empty()) {
-    std::cerr << "Error: invalid format in FAT first line (no comma found or "
-                 "empty line)"
-              << std::endl;
+
+  // 1. Открываем FAT для чтения и записи
+  std::fstream FAT("FAT", std::ios::in | std::ios::out | std::ios::binary);
+  if (!FAT.is_open()) {
+    std::cerr << "Error: FAT file not opened!" << std::endl;
     return;
   }
-  std::string new_line =
-      std::to_string(number_start_free_memory) + line.substr(comma_pos);
-  FAT.seekp(0);
-  FAT.write(new_line.c_str(), new_line.length());
-  std::cout << new_line << std::endl;
-  std::cout << " " << first_position << " " << blocks_cnt << " "
-            << first_position + blocks_cnt * BLK_SIZE;
 
-  std::string fat_write_first_line_text =
+  // 2. Читаем ВСЁ содержимое FAT (кроме первой строки)
+  std::string first_line;
+  std::getline(FAT, first_line); // Читаем и игнорируем старую первую строку
+
+  std::stringstream rest_of_fat;
+  rest_of_fat << FAT.rdbuf(); // Сохраняем остальное содержимое
+
+  // 3. Перезаписываем FAT с нуля
+  FAT.close();
+  FAT.open("FAT",
+           std::ios::out | std::ios::trunc | std::ios::binary); // Очищаем файл
+
+  // 4. Записываем новую первую строку
+  std::string new_first_line = std::to_string(number_start_free_memory) + ",";
+  FAT.write(new_first_line.c_str(), new_first_line.size());
+
+  // 5. Добавляем остальные данные обратно
+  FAT << rest_of_fat.str();
+
+  // 6. Добавляем запись о новом файле
+  std::string new_file_entry =
       "\n" + file_name + "[" + std::to_string(first_position) + "," +
       std::to_string(first_position + blocks_cnt * BLK_SIZE) + "]";
-  std::cout << "wtite new first line in FAT " << new_line << std::endl;
-  FAT.seekp(0, std::ios::end);
-  FAT.write(fat_write_first_line_text.c_str(),
-            fat_write_first_line_text.length());
+  FAT.write(new_file_entry.c_str(), new_file_entry.size());
+
   FAT.flush();
+  FAT.close();
+
+  std::cout << "FAT updated:" << std::endl;
+  std::cout << new_first_line << std::endl;
+  std::cout << new_file_entry << std::endl;
 }
 
 void write_file(std::string file_name) {
