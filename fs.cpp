@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <cstring>
 #include <fstream>
 #include <ios>
@@ -108,6 +109,27 @@ void write_file(std::string file_name) {
                       blocks_cnt);
 }
 
+bool check_for_duplicate_file_name(std::string filename) {
+
+  std::ifstream FAT("FAT");
+  std::string line;
+  std::getline(FAT, line);
+
+  while (std::getline(FAT, line)) {
+    size_t start_bracket = line.find("[");
+    if (start_bracket == std::string::npos) {
+      continue;
+    }
+    std::string current_filename = line.substr(0, start_bracket);
+    if (current_filename == filename) {
+      FAT.close();
+      return false;
+    }
+  }
+  FAT.close();
+  return true;
+};
+
 int main(int argc, char *argv[]) {
   std::cout << "start" << std::endl;
   std::string path = "FAT";
@@ -128,10 +150,15 @@ int main(int argc, char *argv[]) {
 
   if (!strcmp(argv[1], "write")) {
     if (argc == 3) {
+      if (!check_for_duplicate_file_name(argv[2])) {
+        std::cerr << "File '" << argv[2] << "' already exists!" << std::endl;
+        return 1;
+      }
       std::cout << "start writing" << std::endl;
       write_file(argv[2]);
     } else {
       std::cout << "Invalid usage, no such command" << std::endl;
+      return 1;
     }
   } else {
     std::cerr << "Invalid usage, no such command" << std::endl;
