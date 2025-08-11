@@ -82,9 +82,15 @@ void write_info_into_FAT(int first_position, long long number_start_free_memory,
 }
 
 void write_file(std::string file_name) {
-  std::string input;
   std::string whole_input;
-  std::getline(std::cin, whole_input);
+  std::string line;
+  while (std::getline(std::cin, line)) {
+    whole_input += line + "\n";
+  }
+
+  if (!whole_input.empty()) {
+    whole_input.pop_back();
+  }
 
   int blocks_cnt = whole_input.length() / BLK_SIZE;
   if (whole_input.length() % BLK_SIZE != 0) {
