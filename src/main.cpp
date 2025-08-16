@@ -6,8 +6,7 @@
 const int BLK_SIZE = 2;
 
 int write_block(std::string block) {
-  std::fstream file;
-  file.open("memory", std::ios::in | std::ios::out);
+  std::fstream file("memory", std::ios::in | std::ios::out);
 
   char bufer[BLK_SIZE];
   file.seekg(0, std::ios::beg);
@@ -43,7 +42,21 @@ int get_blocks_cnt(const std::string &str) {
   return blocks_cnt;
 }
 
-void write_file(std::string file_name) {
+void update_FAT(int blocks_cnt, int first_position,
+                const std::string &file_name) {
+  // для FAT
+  std::cout << " " << first_position << " " << blocks_cnt << " "
+            << first_position + blocks_cnt * BLK_SIZE;
+
+  std::fstream FAT("FAT", std::ios::out | std::ios::app);
+
+  std::string fat_write_text =
+      file_name + "[" + std::to_string(first_position) + "," +
+      std::to_string(first_position + blocks_cnt * BLK_SIZE) + "]" + "\n";
+  FAT.write(fat_write_text.c_str(), fat_write_text.length());
+}
+
+void write_file(const std::string &file_name) {
   // Читает из stdin и записывает в свободное место в memory
   std::string input;
   std::string whole_input;
@@ -65,18 +78,8 @@ void write_file(std::string file_name) {
       None = write_block(whole_input.substr(i * BLK_SIZE, BLK_SIZE));
     }
   }
-  // для FAT
-  std::cout << " " << first_position << " " << blocks_cnt << " "
-            << first_position + blocks_cnt * BLK_SIZE;
 
-  std::fstream FAT;
-
-  FAT.open("FAT", std::ios::out | std::ios::app);
-
-  std::string fat_write_text =
-      file_name + "[" + std::to_string(first_position) + "," +
-      std::to_string(first_position + blocks_cnt * BLK_SIZE) + "]" + "\n";
-  FAT.write(fat_write_text.c_str(), fat_write_text.length());
+  update_FAT(blocks_cnt, first_position, file_name);
 }
 
 int main(int argc, char *argv[]) {
