@@ -1,21 +1,22 @@
+#include <cstdlib>
+#include <fcntl.h>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <vector>
+
+const int BLK_SIZE = 2;
 
 class Block {
 public:
   long long start;
   long long end;
 };
-
-std::ostream &operator<<(std::ostream &os, const Block &block) {
-  os << "[" << block.start << "-" << block.end << "]";
-  return os;
-}
 
 class FileInfo {
 public:
@@ -24,7 +25,7 @@ public:
 };
 
 struct FATData {
-  long long total_blocks;
+  long long start_free_memory;
   std::vector<Block> empty_blocks;
   std::map<std::string, FileInfo> files;
 };
@@ -41,7 +42,7 @@ FATData read_FAT_from_disk() {
     std::istringstream iss(line);
     char delim;
 
-    if (!(iss >> result.total_blocks)) {
+    if (!(iss >> result.start_free_memory)) {
       throw std::runtime_error("Invalid format: expected total blocks count");
     }
 
@@ -103,24 +104,91 @@ FATData read_FAT_from_disk() {
   return result;
 }
 
+void write_block(std::string block, long long pos_start) {
+  std::cout << "Block: " << block << "\n";
+  // определить пустое место в memory
+  // записать в него блок
+
+  std::fstream file;
+  file.open("memory", std::ios::in | std::ios::out | std::ios::binary);
+  file.seekp(pos_start);
+  file.write(block.c_str(), BLK_SIZE);
+  file.close();
+}
+
+void write_file(const char *filename, const char *text, FATData &data) {
+  if (filename == nullptr || filename[0] == '\0') {
+    std::cerr << "Error no filename" << std::endl;
+    return;
+  }
+  std::string whole_input = text;
+
+  int blocks_cnt = whole_input.length() / BLK_SIZE;
+  if (whole_input.length() % BLK_SIZE != 0) {
+    blocks_cnt++;
+  }
+
+  long long current_pos = data.start_free_memory;
+  FileInfo &fileinfo = data.files[filename]; // получаем ссылку на файл в map
+  fileinfo.name = filename;
+  fileinfo.data.clear(); // очищаем старые блоки для перезаписи файла
+
+  for (int i = 0; i < blocks_cnt; ++i) {
+    std::string block_str = whole_input.substr(i * BLK_SIZE, BLK_SIZE);
+
+    write_block(block_str, current_pos);
+
+    Block block;
+    block.start = current_pos;
+    block.end = current_pos + BLK_SIZE - 1;
+    fileinfo.data.push_back(block);
+
+    current_pos += BLK_SIZE;
+  }
+
+  // Обновляем start_free_memory после записи
+  data.start_free_memory = current_pos;
+}
+
 int main() {
   FATData data = read_FAT_from_disk();
+  const char *fifo_path = "./myfifo";
 
-  std::cout << "Общее количество блоков: " << data.total_blocks << std::endl;
-
-  if (!data.empty_blocks.empty()) {
-    std::cout << "Первый свободный блок: " << data.empty_blocks[0] << std::endl;
-  } else {
-    std::cout << "Нет свободных блоков!" << std::endl;
+  if (mkfifo(fifo_path, 0666) == -1) {
+    std::cerr << "FIFO уже существует или ошибка создания" << std::endl;
   }
 
-  for (const auto &[name, file] : data.files) {
-    std::cout << "Файл: " << name << " | Блоки: ";
-    for (const Block &block : file.data) {
-      std::cout << block << " ";
+  int fd = open(fifo_path, O_RDONLY);
+  char buffer[1024];
+  while (true) {
+    ssize_t bytes_read = read(fd, buffer, sizeof(buffer) - 1);
+    if (bytes_read == -1) {
+      perror("Ошибка чтения");
+      break;
+    } else if (bytes_read == 0) {
+      std::cout << "Клиент отключился" << std::endl;
+      break;
+    } else {
+      buffer[bytes_read] = '\0';
+      std::cout << "Получено от клиента: " << buffer;
+      if (buffer[0] == 'w') {
+        std::istringstream iss(buffer + 1);
+        std::string filename;
+        iss >> filename;
+        std::string text;
+        std::getline(iss, text);
+        if (!text.empty() && text == " ")
+          text.erase(0, 1);
+        write_file(filename.c_str(), text.c_str(), data);
+      }
+      if (buffer[bytes_read - 1] != '\n') {
+        std::cout << std::endl;
+      }
     }
-    std::cout << std::endl;
   }
 
+  close(fd);
+  unlink(fifo_path); // Удаляем FIFO при завершении
+  std::cout << "Сервер завершает работу" << std::endl;
   return 0;
 }
