@@ -11,6 +11,7 @@
 #include <vector>
 
 const int BLK_SIZE = 2;
+const char *FAT_PATH = "FAT";
 
 class Block {
 public:
@@ -30,9 +31,21 @@ struct FATData {
   std::map<std::string, FileInfo> files;
 };
 
+void print_block(std::ofstream &FAT, Block &block) {
+  FAT << "[" << block.start << "-" << block.end << "]";
+}
+
+void print_file_info(std::ofstream &FAT, FileInfo &file_info) {
+  FAT << file_info.name;
+  for (Block block : file_info.data) {
+    print_block(FAT, block);
+  }
+  FAT << "\n";
+}
+
 FATData read_FAT_from_disk() {
   FATData result;
-  std::ifstream FAT("FAT");
+  std::ifstream FAT(FAT_PATH);
   if (!FAT) {
     throw std::runtime_error("Failed to open FAT file");
   }
@@ -150,6 +163,24 @@ void write_file(const char *filename, const char *text, FATData &data) {
   data.start_free_memory = current_pos;
 }
 
+void dump_FAT_to_disk(FATData &data) {
+  std::ofstream FAT(FAT_PATH);
+  if (!FAT) {
+    throw std::runtime_error("Failed to open FAT file");
+  }
+
+  FAT << data.start_free_memory << ",";
+  for (Block empty_block : data.empty_blocks) {
+    print_block(FAT, empty_block);
+  }
+
+  FAT << "\n";
+
+  for (auto &[filename, file_info] : data.files) {
+    print_file_info(FAT, file_info);
+  }
+}
+
 int main() {
   FATData data = read_FAT_from_disk();
   const char *fifo_path = "./myfifo";
@@ -179,7 +210,14 @@ int main() {
         std::getline(iss, text);
         if (!text.empty() && text == " ")
           text.erase(0, 1);
-        write_file(filename.c_str(), text.c_str(), data);
+
+        if (data.files.find(filename) != data.files.end()) {
+          std::cout << "Файл с именем " << filename << " уже существует!"
+                    << std::endl;
+          // write_error_to_client()
+        } else {
+          write_file(filename.c_str(), text.c_str(), data);
+        }
       }
       if (buffer[bytes_read - 1] != '\n') {
         std::cout << std::endl;
@@ -190,5 +228,8 @@ int main() {
   close(fd);
   unlink(fifo_path); // Удаляем FIFO при завершении
   std::cout << "Сервер завершает работу" << std::endl;
+
+  dump_FAT_to_disk(data);
+
   return 0;
 }
