@@ -36,7 +36,8 @@ int main() {
     }
 
     message += '\n';
-    ssize_t bytes_written = write(fd, message.c_str(), message.length());
+    ssize_t bytes_written =
+        write(fd, message.c_str(), message.length()); // while
     if (bytes_written == -1) {
       perror("Ошибка записи");
       break;
