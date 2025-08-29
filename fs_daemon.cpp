@@ -224,9 +224,8 @@ int main() {
         iss >> filename;
         std::string text;
         std::getline(iss, text);
-        if (!text.empty() && text == " ")
-          text.erase(0, 1);
-
+        if (!text.empty())
+          text.erase(0, text.find_first_not_of(' '));
         if (data.files.find(filename) != data.files.end()) {
           write_status_client("Файл с именем " + filename + " уже существует");
         } else {
