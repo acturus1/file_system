@@ -138,6 +138,10 @@ FATData read_FAT_from_disk() {
   return result;
 }
 
+void delete_block(Block &block, FATData &data) {
+  data.empty_blocks.push_back(block);
+}
+
 void write_block(std::string block, long long pos_start) {
   std::cout << "Block: " << block << "\n";
 
@@ -182,6 +186,22 @@ void write_file(const char *filename, const char *text, FATData &data) {
   write_status_client("OK");
 }
 
+int delete_file(std::string &filename, FATData &data) {
+  if (data.files.find(filename) == data.files.end()) {
+    write_status_client("Файл с именем " + filename + " не существует");
+    return 1;
+  }
+  FileInfo file_to_delete = data.files[filename];
+  for (Block block : file_to_delete.data) {
+    delete_block(block, data);
+  }
+
+  data.files.erase(filename);
+
+  write_status_client("OK");
+  return 0;
+}
+
 void dump_FAT_to_disk(FATData &data) {
   std::ofstream FAT(FAT_PATH);
   if (!FAT) {
@@ -223,6 +243,7 @@ int main() {
         std::string filename;
         iss >> filename;
         std::string text;
+        iss >> text;
         std::getline(iss, text);
         if (!text.empty())
           text.erase(0, text.find_first_not_of(' '));
@@ -231,6 +252,11 @@ int main() {
         } else {
           write_file(filename.c_str(), text.c_str(), data);
         }
+      } else if (buffer[0] == 'd') {
+        std::istringstream iss(buffer + 1);
+        std::string filename;
+        iss >> filename;
+        delete_file(filename, data);
       }
       if (buffer[bytes_read - 1] != '\n') {
         std::cout << std::endl;
