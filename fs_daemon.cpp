@@ -164,41 +164,55 @@ void write_file(const char *filename, const char *text, FATData &data) {
     blocks_cnt++;
   }
 
-  long long current_pos = data.start_free_memory;
   FileInfo &fileinfo = data.files[filename];
   fileinfo.name = filename;
   fileinfo.data.clear();
 
-  for (int i = 0; i < blocks_cnt; ++i) {
+  for (int i = 0; i < blocks_cnt; i++) {
     std::string block_str = whole_input.substr(i * BLK_SIZE, BLK_SIZE);
 
-    write_block(block_str, current_pos);
+    if (data.empty_blocks.size() > 0) {
+      long long start = data.empty_blocks[0].start;
+      write_block(block_str, start);
 
-    Block block;
-    block.start = current_pos;
-    block.end = current_pos + BLK_SIZE - 1;
-    fileinfo.data.push_back(block);
+      Block block{start, start + BLK_SIZE - 1};
+      fileinfo.data.push_back(block);
 
-    current_pos += BLK_SIZE;
+      data.empty_blocks.erase(data.empty_blocks.begin());
+    } else {
+      long long start = data.start_free_memory;
+      write_block(block_str, start);
+
+      Block block{start, start + BLK_SIZE - 1};
+      fileinfo.data.push_back(block);
+
+      data.start_free_memory += BLK_SIZE;
+    }
   }
 
-  data.start_free_memory = current_pos;
   write_status_client("OK");
 }
 
-int delete_file(std::string &filename, FATData &data) {
+int delete_file(const char *filename, FATData &data) {
   if (data.files.find(filename) == data.files.end()) {
-    write_status_client("Файл с именем " + filename + " не существует");
+    std::string filename_string = filename;
+    write_status_client("Файл с именем " + filename_string + " не существует");
     return 1;
   }
+
   FileInfo file_to_delete = data.files[filename];
   for (Block block : file_to_delete.data) {
     delete_block(block, data);
   }
-
   data.files.erase(filename);
+  return 0;
+}
 
-  write_status_client("OK");
+int edit_file(const char *filename, const char *text, FATData &data) {
+  if (delete_file(filename, data) != 0) {
+    return 1;
+  }
+  write_file(filename, text, data);
   return 0;
 }
 
@@ -238,25 +252,27 @@ int main() {
     } else {
       buffer[bytes_read] = '\0';
       std::cout << "Получено от клиента: " << buffer;
+      std::istringstream iss(buffer + 1);
+      std::string filename;
+      iss >> filename;
       if (buffer[0] == 'w') {
-        std::istringstream iss(buffer + 1);
-        std::string filename;
-        iss >> filename;
         std::string text;
         iss >> text;
-        std::getline(iss, text);
-        if (!text.empty())
-          text.erase(0, text.find_first_not_of(' '));
         if (data.files.find(filename) != data.files.end()) {
           write_status_client("Файл с именем " + filename + " уже существует");
         } else {
           write_file(filename.c_str(), text.c_str(), data);
         }
       } else if (buffer[0] == 'd') {
-        std::istringstream iss(buffer + 1);
-        std::string filename;
-        iss >> filename;
-        delete_file(filename, data);
+        if (delete_file(filename.c_str(), data) == 0) {
+          write_status_client("OK");
+        }
+      } else if (buffer[0] == 'e') {
+        std::string text;
+        iss >> text;
+        if (edit_file(filename.c_str(), text.c_str(), data) == 0) {
+          write_status_client("OK");
+        }
       }
       if (buffer[bytes_read - 1] != '\n') {
         std::cout << std::endl;
