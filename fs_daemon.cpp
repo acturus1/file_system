@@ -257,6 +257,17 @@ void read_file(const char *filename, FATData &data) {
   }
 }
 
+void list_files(FATData &data) {
+  if (data.files.empty()) {
+    write_status_client("");
+    return;
+  }
+  std::string file_name_list;
+  for (auto &[filename, file_info] : data.files)
+    file_name_list += filename + " ";
+  write_status_client(file_name_list);
+}
+
 int main() {
   FATData data = read_FAT_from_disk();
 
@@ -298,6 +309,8 @@ int main() {
         }
       } else if (buffer[0] == 'r') {
         read_file(filename.c_str(), data);
+      } else if (buffer[0] == 'l') {
+        list_files(data);
       }
       if (buffer[bytes_read - 1] != '\n') {
         std::cout << std::endl;
