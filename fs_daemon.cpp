@@ -234,6 +234,29 @@ void dump_FAT_to_disk(FATData &data) {
   }
 }
 
+std::string read_block(Block block) {
+  std::ifstream file("memory", std::ios::binary);
+  file.seekg(block.start);
+  char block_str[BLK_SIZE + 1] = {0};
+  file.read(block_str, BLK_SIZE);
+  file.close();
+  return block_str;
+}
+
+void read_file(const char *filename, FATData &data) {
+  std::string result;
+  auto file = data.files.find(filename);
+  if (file != data.files.end()) {
+    const FileInfo &fileInfo = file->second;
+    for (Block block : fileInfo.data)
+      result += read_block(block);
+    write_status_client(result);
+  } else {
+    std::string filename_str = filename;
+    write_status_client("Файл с именем " + filename_str + " не существует");
+  }
+}
+
 int main() {
   FATData data = read_FAT_from_disk();
 
@@ -273,6 +296,8 @@ int main() {
         if (edit_file(filename.c_str(), text.c_str(), data) == 0) {
           write_status_client("OK");
         }
+      } else if (buffer[0] == 'r') {
+        read_file(filename.c_str(), data);
       }
       if (buffer[bytes_read - 1] != '\n') {
         std::cout << std::endl;
