@@ -34,10 +34,11 @@ int main() {
       message.replace(0, 4, "r");
     } else if (message.find("delete ") == 0) {
       message.replace(0, 6, "d");
-    } else {
-      puts("Ошибка записи");
+    } else if (message.find("ls") == 0) {
+      message.replace(0, 2, "l");
       continue;
-    }
+        } else {
+      puts("Ошибка записи");
 
     message += '\n';
     ssize_t bytes_written =
