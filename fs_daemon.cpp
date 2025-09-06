@@ -21,10 +21,13 @@ public:
   long long end;
 };
 
+enum class FileType { FILE, DIRECTORY };
+
 class FileInfo {
 public:
   std::string name;
   std::vector<Block> data;
+  FileType type = FileType::FILE;
 };
 
 struct FATData {
