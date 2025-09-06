@@ -10,7 +10,7 @@ int main() {
 
   int fd = open(fifo_path, O_WRONLY);
   if (fd == -1) {
-    perror("Ошибка открытия FIFO на запись");
+    puts("Ошибка открытия FIFO на запись");
     return 1;
   }
 
@@ -36,22 +36,21 @@ int main() {
       message.replace(0, 6, "d");
     } else if (message.find("ls") == 0) {
       message.replace(0, 2, "l");
-    } else {
-      perror("Ошибка");
       continue;
-    }
+        } else {
+      puts("Ошибка записи");
 
     message += '\n';
     ssize_t bytes_written =
         write(fd, message.c_str(), message.length()); // while
     if (bytes_written == -1) {
-      perror("Ошибка записи");
+      puts("Ошибка записи");
       break;
     }
     std::cout << "Команда отправлена. Ожидание ответа..." << std::endl;
     int read_fd = open(fifo_path_read, O_RDONLY);
     if (read_fd == -1) {
-      perror("Ошибка открытия FIFO на чтение");
+      puts("Ошибка открытия FIFO на чтение");
       close(read_fd);
       return 1;
     }
@@ -62,7 +61,7 @@ int main() {
       reply[bytes_read] = '\0';
       std::cout << "Ответ сервера: " << reply;
     } else if (bytes_read == -1) {
-      perror("Ошибка чтения ответа");
+      puts("Ошибка чтения ответа");
     }
   }
   close(fd);
