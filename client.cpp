@@ -37,9 +37,9 @@ int main() {
     } else if (message.find("ls") == 0) {
       message.replace(0, 2, "l");
       continue;
-        } else {
+    } else {
       puts("Ошибка записи");
-
+    }
     message += '\n';
     ssize_t bytes_written =
         write(fd, message.c_str(), message.length()); // while
