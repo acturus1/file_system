@@ -34,6 +34,11 @@ int main() {
       message.replace(0, 4, "r");
     } else if (message.find("delete ") == 0) {
       message.replace(0, 6, "d");
+    } else if (message.find("ls") == 0) {
+      message.replace(0, 2, "l");
+    } else {
+      perror("Ошибка");
+      continue;
     }
 
     message += '\n';
