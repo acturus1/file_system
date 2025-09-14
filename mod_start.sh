@@ -1,4 +1,5 @@
 #!/bin/bash
+# TODO: добавить опции d и c (или --degub, --cleanup)
 
 g++ fs_daemon.cpp -o server.out
 g++ client.cpp -o client.out
