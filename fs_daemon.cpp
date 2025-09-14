@@ -21,7 +21,7 @@ public:
   long long end;
 };
 
-enum class FileType { FILE, DIRECTORY };
+enum class FileType { FILE, DIR };
 
 class FileInfo {
 public:
@@ -80,7 +80,7 @@ void get_file_type(std::string &line, size_t &pos, FileInfo &file) {
     file.type = FileType::FILE;
     break;
   case 'd':
-    file.type = FileType::DIRECTORY;
+    file.type = FileType::DIR;
     break;
   default:
     puts(file.name.c_str());
@@ -142,7 +142,7 @@ FATData read_FAT_from_disk() {
 
     while (true) {
       size_t close_br = line.find(']', pos);
-      if (close_br == std::string::npos)
+      if (close_br == std::string::npos) // for empty files
         break;
 
       std::string range = line.substr(pos + 1, close_br - pos - 1);
@@ -178,7 +178,8 @@ void write_block(std::string block, long long pos_start) {
   file.close();
 }
 
-void write_file(const char *filename, const char *text, FATData &data) {
+void write_file(const char *filename, const char *text, FATData &data,
+                FileType filetype = FileType::FILE) {
   if (filename == nullptr || filename[0] == '\0') {
     std::cerr << "Error no filename" << std::endl;
     return;
@@ -192,6 +193,7 @@ void write_file(const char *filename, const char *text, FATData &data) {
 
   FileInfo &fileinfo = data.files[filename];
   fileinfo.name = filename;
+  fileinfo.type = filetype;
   fileinfo.data.clear();
 
   for (int i = 0; i < blocks_cnt; i++) {
@@ -242,8 +244,7 @@ int edit_file(const char *filename, const char *text, FATData &data) {
   return 0;
 }
 
-void print_FAT(FATData &data) {
-
+void debug_print_FAT(FATData &data) {
   std::cout << data.start_free_memory << ",";
   for (Block empty_block : data.empty_blocks) {
     std::cout << "[" << empty_block.start << "-" << empty_block.end << "]";
@@ -316,8 +317,7 @@ void list_files(FATData &data) {
 int main() {
   FATData data = read_FAT_from_disk();
 
-  // debug
-  print_FAT(data);
+  debug_print_FAT(data);
 
   create_fifos();
 
@@ -346,6 +346,13 @@ int main() {
           write_file(filename.c_str(), text.c_str(), data);
         }
       } else if (buffer[0] == 'd') {
+        if (data.files.find(filename) != data.files.end()) {
+          write_status_client("Директория с именем " + filename +
+                              " уже существует");
+        } else {
+          write_file(filename.c_str(), "", data, FileType::DIR);
+        }
+      } else if (buffer[0] == 'x') {
         if (delete_file(filename.c_str(), data) == 0) {
           write_status_client("OK");
         }
