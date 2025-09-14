@@ -21,7 +21,7 @@ public:
   long long end;
 };
 
-enum class FileType { FILE, DIRECTORY };
+enum class FileType { FILE, DIR };
 
 class FileInfo {
 public:
@@ -41,7 +41,8 @@ void print_block(std::ofstream &FAT, Block &block) {
 }
 
 void print_file_info(std::ofstream &FAT, FileInfo &file_info) {
-  FAT << file_info.name;
+  char type = file_info.type == FileType::FILE ? 'f' : 'd';
+  FAT << file_info.name << ";" << type << ";";
   for (Block block : file_info.data) {
     print_block(FAT, block);
   }
@@ -65,6 +66,28 @@ void write_status_client(const std::string &message) {
   std::string msg = message + '\n';
   write(fd, msg.c_str(), msg.length());
   close(fd);
+}
+
+void get_file_name(std::string &line, size_t &pos, FileInfo &file) {
+  file.name = line.substr(0, pos);
+  pos++;
+}
+
+void get_file_type(std::string &line, size_t &pos, FileInfo &file) {
+  char type_char = line.substr(pos, pos + 1)[0];
+  switch (type_char) {
+  case 'f':
+    file.type = FileType::FILE;
+    break;
+  case 'd':
+    file.type = FileType::DIR;
+    break;
+  default:
+    puts(file.name.c_str());
+    puts("Unknown file type while reading FAT");
+    break;
+  }
+  pos += 2;
 }
 
 FATData read_FAT_from_disk() {
@@ -109,17 +132,17 @@ FATData read_FAT_from_disk() {
   }
 
   while (std::getline(FAT, line)) {
-    size_t open_br = line.find('[');
-    if (open_br == std::string::npos)
+    size_t pos = line.find(';');
+    if (pos == std::string::npos)
       continue;
 
     FileInfo file;
-    file.name = line.substr(0, open_br);
+    get_file_name(line, pos, file);
+    get_file_type(line, pos, file);
 
-    size_t pos = open_br;
     while (true) {
       size_t close_br = line.find(']', pos);
-      if (close_br == std::string::npos)
+      if (close_br == std::string::npos) // for empty files
         break;
 
       std::string range = line.substr(pos + 1, close_br - pos - 1);
@@ -155,7 +178,8 @@ void write_block(std::string block, long long pos_start) {
   file.close();
 }
 
-void write_file(const char *filename, const char *text, FATData &data) {
+void write_file(const char *filename, const char *text, FATData &data,
+                FileType filetype = FileType::FILE) {
   if (filename == nullptr || filename[0] == '\0') {
     std::cerr << "Error no filename" << std::endl;
     return;
@@ -169,6 +193,7 @@ void write_file(const char *filename, const char *text, FATData &data) {
 
   FileInfo &fileinfo = data.files[filename];
   fileinfo.name = filename;
+  fileinfo.type = filetype;
   fileinfo.data.clear();
 
   for (int i = 0; i < blocks_cnt; i++) {
@@ -217,6 +242,24 @@ int edit_file(const char *filename, const char *text, FATData &data) {
   }
   write_file(filename, text, data);
   return 0;
+}
+
+void debug_print_FAT(FATData &data) {
+  std::cout << data.start_free_memory << ",";
+  for (Block empty_block : data.empty_blocks) {
+    std::cout << "[" << empty_block.start << "-" << empty_block.end << "]";
+  }
+
+  std::cout << "\n";
+
+  for (auto &[filename, file_info] : data.files) {
+    char type = file_info.type == FileType::FILE ? 'f' : 'd';
+    std::cout << file_info.name << ";" << type << ";";
+    for (Block block : file_info.data) {
+      std::cout << "[" << block.start << "-" << block.end << "]";
+    }
+    std::cout << "\n";
+  }
 }
 
 void dump_FAT_to_disk(FATData &data) {
@@ -274,6 +317,8 @@ void list_files(FATData &data) {
 int main() {
   FATData data = read_FAT_from_disk();
 
+  debug_print_FAT(data);
+
   create_fifos();
 
   int fd = open(fifo_path, O_RDONLY);
@@ -301,6 +346,13 @@ int main() {
           write_file(filename.c_str(), text.c_str(), data);
         }
       } else if (buffer[0] == 'd') {
+        if (data.files.find(filename) != data.files.end()) {
+          write_status_client("Директория с именем " + filename +
+                              " уже существует");
+        } else {
+          write_file(filename.c_str(), "", data, FileType::DIR);
+        }
+      } else if (buffer[0] == 'x') {
         if (delete_file(filename.c_str(), data) == 0) {
           write_status_client("OK");
         }
