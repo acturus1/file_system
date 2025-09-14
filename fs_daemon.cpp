@@ -41,7 +41,8 @@ void print_block(std::ofstream &FAT, Block &block) {
 }
 
 void print_file_info(std::ofstream &FAT, FileInfo &file_info) {
-  FAT << file_info.name;
+  char type = file_info.type == FileType::FILE ? 'f' : 'd';
+  FAT << file_info.name << ";" << type << ";";
   for (Block block : file_info.data) {
     print_block(FAT, block);
   }
@@ -65,6 +66,28 @@ void write_status_client(const std::string &message) {
   std::string msg = message + '\n';
   write(fd, msg.c_str(), msg.length());
   close(fd);
+}
+
+void get_file_name(std::string &line, size_t &pos, FileInfo &file) {
+  file.name = line.substr(0, pos);
+  pos++;
+}
+
+void get_file_type(std::string &line, size_t &pos, FileInfo &file) {
+  char type_char = line.substr(pos, pos + 1)[0];
+  switch (type_char) {
+  case 'f':
+    file.type = FileType::FILE;
+    break;
+  case 'd':
+    file.type = FileType::DIRECTORY;
+    break;
+  default:
+    puts(file.name.c_str());
+    puts("Unknown file type while reading FAT");
+    break;
+  }
+  pos += 2;
 }
 
 FATData read_FAT_from_disk() {
@@ -109,14 +132,14 @@ FATData read_FAT_from_disk() {
   }
 
   while (std::getline(FAT, line)) {
-    size_t open_br = line.find('[');
-    if (open_br == std::string::npos)
+    size_t pos = line.find(';');
+    if (pos == std::string::npos)
       continue;
 
     FileInfo file;
-    file.name = line.substr(0, open_br);
+    get_file_name(line, pos, file);
+    get_file_type(line, pos, file);
 
-    size_t pos = open_br;
     while (true) {
       size_t close_br = line.find(']', pos);
       if (close_br == std::string::npos)
@@ -219,6 +242,25 @@ int edit_file(const char *filename, const char *text, FATData &data) {
   return 0;
 }
 
+void print_FAT(FATData &data) {
+
+  std::cout << data.start_free_memory << ",";
+  for (Block empty_block : data.empty_blocks) {
+    std::cout << "[" << empty_block.start << "-" << empty_block.end << "]";
+  }
+
+  std::cout << "\n";
+
+  for (auto &[filename, file_info] : data.files) {
+    char type = file_info.type == FileType::FILE ? 'f' : 'd';
+    std::cout << file_info.name << ";" << type << ";";
+    for (Block block : file_info.data) {
+      std::cout << "[" << block.start << "-" << block.end << "]";
+    }
+    std::cout << "\n";
+  }
+}
+
 void dump_FAT_to_disk(FATData &data) {
   std::ofstream FAT(FAT_PATH);
   if (!FAT) {
@@ -273,6 +315,9 @@ void list_files(FATData &data) {
 
 int main() {
   FATData data = read_FAT_from_disk();
+
+  // debug
+  print_FAT(data);
 
   create_fifos();
 
