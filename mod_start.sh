@@ -1,47 +1,51 @@
-#!/bin/bash
-# TODO: добавить опции d и c (или --degub, --cleanup)
+
+
+DEBUG=0
+CLEAN=0
+
+[[ "$*" == *d* ]] && DEBUG=1
+[[ "$*" == *c* ]] && CLEAN=1
 
 g++ fs_daemon.cpp -o server.out
 g++ client.cpp -o client.out
 
 cleanup() {
-    pkill -f "watch bat -A memory"
-    pkill -f "watch bat -A FAT"
-    pkill -f "./server.out"
-    pkill -P $$ alacritty 2>/dev/null || true
-    rm client.out 
-    rm server.out
-    rm FAT
-    rm memory
-    exit 0
+    pkill -f "watch bat" 2>/dev/null
+    pkill -f "./server.out" 2>/dev/null
+    pkill -P $$ alacritty 2>/dev/null
+    (( CLEAN )) && rm -f client.out server.out FAT memory
+    exit
 }
 
-dd if=/dev/zero bs=1 of=memory count=1024
-touch FAT
-
 trap cleanup SIGINT SIGTERM EXIT
-i3-msg split v
 
-alacritty -e bash -c "trap 'exit 0' SIGINT SIGTERM; watch bat -A memory" &
-MEMORY_PID=$!
-sleep 0.3
 i3-msg split v
-alacritty -e bash -c "trap 'exit 0' SIGINT SIGTERM; watch bat -A FAT" &
-FAT_PID=$!
+alacritty -e watch bat -A memory &
+sleep 0.3
+
+i3-msg split v
+alacritty -e watch bat -A FAT &
 sleep 0.3
 
 i3-msg focus down
 i3-msg split h
 
-./server.out &
+if (( DEBUG )); then
+    alacritty -e gdb -ex run ./server.out &
+else
+    ./server.out &
+fi
 SERVER_PID=$!
 
-echo "🚀 Запуск клиента..."
-alacritty -e bash -c "./client.out; echo 'Клиент завершен'; sleep 2" &
+sleep 1
+
+alacritty -e ./client.out &
 CLIENT_PID=$!
-sleep 0.3
-i3-msg move right
 
-wait $CLIENT_PID
+if (( DEBUG )); then
+    wait $CLIENT_PID
+    echo "Нажмите Enter для выхода..."
+    read
+fi
 
-cleanup
+wait
