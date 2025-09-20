@@ -178,7 +178,7 @@ void write_block(std::string block, long long pos_start) {
   file.close();
 }
 
-bool check_name_conflict(const std::string &filename, FATData &data,
+bool file_already_exists(const std::string &filename, FATData &data,
                          FileType requested_type) {
   auto it = data.files.find(filename);
   if (it != data.files.end()) {
@@ -188,13 +188,32 @@ bool check_name_conflict(const std::string &filename, FATData &data,
           (existing_type == FileType::FILE) ? "файл" : "директория";
       std::string requested_type_str =
           (requested_type == FileType::FILE) ? "файл" : "директория";
-      write_status_client("Ошибка: имя '" + filename + "' уже используется " +
-                          existing_type_str + ", нельзя создать " +
-                          requested_type_str);
-      return true;
     }
+    return true;
   }
   return false;
+}
+
+bool is_valid_name(std::string &filename) {
+  if (filename[0] != '/') {
+    return false;
+  }
+  return true;
+}
+
+bool all_filepath_unit_exist(FATData &data, std::string filepath) {
+  std::string full_unit_path;
+  filepath.erase(0, 1); // delete first '/'
+  while (filepath.find('/') != filepath.npos) {
+    size_t slash_pos = filepath.find('/');
+    std::string filepath_unit = filepath.substr(0, slash_pos);
+    filepath.erase(0, slash_pos + 1);
+    full_unit_path += "/" + filepath_unit;
+    if (!file_already_exists(full_unit_path, data, FileType::DIR)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 void create_directory(const char *dirname, FATData &data) {
@@ -205,7 +224,9 @@ void create_directory(const char *dirname, FATData &data) {
   }
 
   std::string dirname_str = dirname;
-  if (check_name_conflict(dirname_str, data, FileType::DIR)) {
+  if (file_already_exists(dirname_str, data, FileType::DIR)) {
+    write_status_client(std::string("Ошибка: директория '") + dirname +
+                        std::string("' уже существует"));
     return;
   }
 
@@ -217,15 +238,23 @@ void create_directory(const char *dirname, FATData &data) {
   write_status_client("OK");
 }
 
-void write_file(const char *filename, const char *text, FATData &data) {
-  if (filename == nullptr || filename[0] == '\0') {
+void write_file(const char *filepath, const char *text, FATData &data) {
+  if (filepath == nullptr || filepath[0] == '\0') {
     std::cerr << "Error no filename" << std::endl;
     write_status_client("Ошибка: не указано имя файла");
     return;
   }
 
-  std::string filename_str = filename;
-  if (check_name_conflict(filename_str, data, FileType::FILE)) {
+  std::string filepath_str = filepath;
+  if (file_already_exists(filepath_str, data, FileType::FILE)) {
+    write_status_client("Ошибка: файл '" + filepath_str + "' уже существует");
+    return;
+  }
+
+  if (!all_filepath_unit_exist(data, filepath)) {
+    write_status_client(
+        std::string("Ошибка: не существует какого-то из звеньев пути ") +
+        filepath);
     return;
   }
 
@@ -236,8 +265,8 @@ void write_file(const char *filename, const char *text, FATData &data) {
     blocks_cnt++;
   }
 
-  FileInfo &fileinfo = data.files[filename_str];
-  fileinfo.name = filename_str;
+  FileInfo &fileinfo = data.files[filepath_str];
+  fileinfo.name = filepath_str;
   fileinfo.type = FileType::FILE;
   fileinfo.data.clear();
 
@@ -422,28 +451,35 @@ int main() {
       buffer[bytes_read] = '\0';
       std::cout << "Получено от клиента: " << buffer;
       std::istringstream iss(buffer + 1);
-      std::string filename;
-      iss >> filename;
+      std::string absolute_file_path;
+      iss >> absolute_file_path;
+      if (!is_valid_name(absolute_file_path)) {
+        write_status_client("Ошибка: имя '" + absolute_file_path +
+                            "' не является абсолютным путём");
+        continue;
+      }
 
       if (buffer[0] == 'w') {
         std::string text;
         iss >> text;
-        write_file(filename.c_str(), text.c_str(), data);
+        write_file(absolute_file_path.c_str(), text.c_str(), data);
       } else if (buffer[0] == 'm') {
-        create_directory(filename.c_str(), data);
+        create_directory(absolute_file_path.c_str(), data);
       } else if (buffer[0] == 'x') {
-        if (delete_file(filename.c_str(), data) == 0) {
+        if (delete_file(absolute_file_path.c_str(), data) == 0) {
           write_status_client("OK");
         }
       } else if (buffer[0] == 'e') {
         std::string text;
         iss >> text;
-        if (edit_file(filename.c_str(), text.c_str(), data) == 0) {
+        if (edit_file(absolute_file_path.c_str(), text.c_str(), data) == 0) {
         }
       } else if (buffer[0] == 'r') {
-        read_file(filename.c_str(), data);
+        read_file(absolute_file_path.c_str(), data);
       } else if (buffer[0] == 'l') {
-        list_files(data);
+        list_files(
+            data); // WARN: сейчас получается так, что для ls существует
+                   // filename, хотя пользователь может делать просто `ls`.
       }
       if (buffer[bytes_read - 1] != '\n') {
         std::cout << std::endl;
