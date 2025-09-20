@@ -6,7 +6,11 @@ CLEAN=0
 [[ "$*" == *d* ]] && DEBUG=1
 [[ "$*" == *c* ]] && CLEAN=1
 
-g++ fs_daemon.cpp -o server.out
+if (( DEBUG )); then
+  g++ fs_daemon.cpp -o server.out -g
+else
+  g++ fs_daemon.cpp -o server.out
+fi
 g++ client.cpp -o client.out
 
 cleanup() {
@@ -31,7 +35,8 @@ i3-msg focus down
 i3-msg split h
 
 if (( DEBUG )); then
-    alacritty -e gdb -ex run ./server.out &
+    # alacritty -e gdb -ex run ./server.out &
+    alacritty -e gdb ./server.out &
 else
     ./server.out &
 fi
