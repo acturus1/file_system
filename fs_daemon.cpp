@@ -142,7 +142,7 @@ FATData read_FAT_from_disk() {
 
     while (true) {
       size_t close_br = line.find(']', pos);
-      if (close_br == std::string::npos) // for empty files
+      if (close_br == std::string::npos)
         break;
 
       std::string range = line.substr(pos + 1, close_br - pos - 1);
@@ -178,12 +178,57 @@ void write_block(std::string block, long long pos_start) {
   file.close();
 }
 
-void write_file(const char *filename, const char *text, FATData &data,
-                FileType filetype = FileType::FILE) {
-  if (filename == nullptr || filename[0] == '\0') {
-    std::cerr << "Error no filename" << std::endl;
+bool check_name_conflict(const std::string &filename, FATData &data,
+                         FileType requested_type) {
+  auto it = data.files.find(filename);
+  if (it != data.files.end()) {
+    FileType existing_type = it->second.type;
+    if (existing_type != requested_type) {
+      std::string existing_type_str =
+          (existing_type == FileType::FILE) ? "файл" : "директория";
+      std::string requested_type_str =
+          (requested_type == FileType::FILE) ? "файл" : "директория";
+      write_status_client("Ошибка: имя '" + filename + "' уже используется " +
+                          existing_type_str + ", нельзя создать " +
+                          requested_type_str);
+      return true;
+    }
+  }
+  return false;
+}
+
+void create_directory(const char *dirname, FATData &data) {
+  if (dirname == nullptr || dirname[0] == '\0') {
+    std::cerr << "Error no directory name" << std::endl;
+    write_status_client("Ошибка: не указано имя директории");
     return;
   }
+
+  std::string dirname_str = dirname;
+  if (check_name_conflict(dirname_str, data, FileType::DIR)) {
+    return;
+  }
+
+  FileInfo &dir_info = data.files[dirname_str];
+  dir_info.name = dirname_str;
+  dir_info.type = FileType::DIR;
+  dir_info.data.clear();
+
+  write_status_client("OK");
+}
+
+void write_file(const char *filename, const char *text, FATData &data) {
+  if (filename == nullptr || filename[0] == '\0') {
+    std::cerr << "Error no filename" << std::endl;
+    write_status_client("Ошибка: не указано имя файла");
+    return;
+  }
+
+  std::string filename_str = filename;
+  if (check_name_conflict(filename_str, data, FileType::FILE)) {
+    return;
+  }
+
   std::string whole_input = text;
 
   int blocks_cnt = whole_input.length() / BLK_SIZE;
@@ -191,9 +236,9 @@ void write_file(const char *filename, const char *text, FATData &data,
     blocks_cnt++;
   }
 
-  FileInfo &fileinfo = data.files[filename];
-  fileinfo.name = filename;
-  fileinfo.type = filetype;
+  FileInfo &fileinfo = data.files[filename_str];
+  fileinfo.name = filename_str;
+  fileinfo.type = FileType::FILE;
   fileinfo.data.clear();
 
   for (int i = 0; i < blocks_cnt; i++) {
@@ -222,24 +267,42 @@ void write_file(const char *filename, const char *text, FATData &data,
 }
 
 int delete_file(const char *filename, FATData &data) {
-  if (data.files.find(filename) == data.files.end()) {
-    std::string filename_string = filename;
-    write_status_client("Файл с именем " + filename_string + " не существует");
+  std::string filename_str = filename;
+  if (data.files.find(filename_str) == data.files.end()) {
+    write_status_client("Файл/директория с именем " + filename_str +
+                        " не существует");
     return 1;
   }
 
-  FileInfo file_to_delete = data.files[filename];
+  FileInfo file_to_delete = data.files[filename_str];
   for (Block block : file_to_delete.data) {
     delete_block(block, data);
   }
-  data.files.erase(filename);
+  data.files.erase(filename_str);
   return 0;
 }
 
 int edit_file(const char *filename, const char *text, FATData &data) {
-  if (delete_file(filename, data) != 0) {
+  std::string filename_str = filename;
+
+  auto it = data.files.find(filename_str);
+  if (it == data.files.end()) {
+    write_status_client("Файл с именем " + filename_str + " не существует");
     return 1;
   }
+
+  if (it->second.type != FileType::FILE) {
+    write_status_client("Ошибка: " + filename_str +
+                        " является директорией, а не файлом");
+    return 1;
+  }
+
+  FileInfo file_to_delete = data.files[filename_str];
+  for (Block block : file_to_delete.data) {
+    delete_block(block, data);
+  }
+  data.files.erase(filename_str);
+
   write_file(filename, text, data);
   return 0;
 }
@@ -293,6 +356,13 @@ void read_file(const char *filename, FATData &data) {
   std::string result;
   auto file = data.files.find(filename);
   if (file != data.files.end()) {
+
+    if (file->second.type != FileType::FILE) {
+      write_status_client("Ошибка: " + std::string(filename) +
+                          " является директорией");
+      return;
+    }
+
     const FileInfo &fileInfo = file->second;
     for (Block block : fileInfo.data)
       result += read_block(block);
@@ -308,10 +378,27 @@ void list_files(FATData &data) {
     write_status_client("");
     return;
   }
-  std::string file_name_list;
-  for (auto &[filename, file_info] : data.files)
-    file_name_list += filename + " ";
-  write_status_client(file_name_list);
+
+  std::string file_list;
+  std::string dir_list;
+
+  for (auto &[filename, file_info] : data.files) {
+    if (file_info.type == FileType::FILE) {
+      file_list += filename + " ";
+    } else {
+      dir_list += filename + "/ ";
+    }
+  }
+
+  std::string result;
+  if (!dir_list.empty()) {
+    result += "Директории: " + dir_list + "\n";
+  }
+  if (!file_list.empty()) {
+    result += "Файлы: " + file_list;
+  }
+
+  write_status_client(result);
 }
 
 int main() {
@@ -337,21 +424,13 @@ int main() {
       std::istringstream iss(buffer + 1);
       std::string filename;
       iss >> filename;
+
       if (buffer[0] == 'w') {
         std::string text;
         iss >> text;
-        if (data.files.find(filename) != data.files.end()) {
-          write_status_client("Файл с именем " + filename + " уже существует");
-        } else {
-          write_file(filename.c_str(), text.c_str(), data);
-        }
-      } else if (buffer[0] == 'd') {
-        if (data.files.find(filename) != data.files.end()) {
-          write_status_client("Директория с именем " + filename +
-                              " уже существует");
-        } else {
-          write_file(filename.c_str(), "", data, FileType::DIR);
-        }
+        write_file(filename.c_str(), text.c_str(), data);
+      } else if (buffer[0] == 'm') {
+        create_directory(filename.c_str(), data);
       } else if (buffer[0] == 'x') {
         if (delete_file(filename.c_str(), data) == 0) {
           write_status_client("OK");
@@ -360,7 +439,6 @@ int main() {
         std::string text;
         iss >> text;
         if (edit_file(filename.c_str(), text.c_str(), data) == 0) {
-          write_status_client("OK");
         }
       } else if (buffer[0] == 'r') {
         read_file(filename.c_str(), data);
