@@ -31,7 +31,7 @@ public:
 };
 
 struct FATData {
-  long long start_free_memory;
+  long long start_free_memory = 0;
   std::vector<Block> empty_blocks;
   std::map<std::string, FileInfo> files;
 };
