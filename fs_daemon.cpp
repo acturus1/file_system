@@ -478,8 +478,7 @@ int main() {
       } else if (buffer[0] == 'r') {
         read_file(absolute_file_path.c_str(), data);
       } else if (buffer[0] == 'l') {
-        list_files(
-            data); // Для ls игнорируем путь (если он есть) и выводим все файлы
+        list_files(data);
       }
       if (buffer[bytes_read - 1] != '\n') {
         std::cout << std::endl;
