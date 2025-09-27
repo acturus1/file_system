@@ -453,7 +453,8 @@ int main() {
       std::istringstream iss(buffer + 1);
       std::string absolute_file_path;
       iss >> absolute_file_path;
-      if (!is_valid_name(absolute_file_path)) {
+
+      if (buffer[0] != 'l' && !is_valid_name(absolute_file_path)) {
         write_status_client("Ошибка: имя '" + absolute_file_path +
                             "' не является абсолютным путём");
         continue;
@@ -478,8 +479,7 @@ int main() {
         read_file(absolute_file_path.c_str(), data);
       } else if (buffer[0] == 'l') {
         list_files(
-            data); // WARN: сейчас получается так, что для ls существует
-                   // filename, хотя пользователь может делать просто `ls`.
+            data); // Для ls игнорируем путь (если он есть) и выводим все файлы
       }
       if (buffer[bytes_read - 1] != '\n') {
         std::cout << std::endl;
