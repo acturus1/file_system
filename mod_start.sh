@@ -6,12 +6,17 @@ CLEAN=0
 [[ "$*" == *d* ]] && DEBUG=1
 [[ "$*" == *c* ]] && CLEAN=1
 
+cd daemon
 if (( DEBUG )); then
   g++ fs_daemon.cpp -o server.out -g
 else
   g++ fs_daemon.cpp -o server.out
 fi
+cd ..
+
+cd client
 g++ client.cpp -o client.out
+cd ..
 
 cleanup() {
     pkill -f "watch bat" 2>/dev/null
