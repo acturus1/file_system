@@ -1,3 +1,4 @@
 test/
 memory
 FAT
+*.out
