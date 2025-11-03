@@ -13,8 +13,10 @@
 #include "model/fat_data.hpp"
 #include "model/file_info.hpp"
 
-#include "constants.cpp"
+#include "constants.hpp"
 #include "fat_funcs.cpp"
+
+#include "utils/utils.hpp"
 
 void create_fifos() {
   mkfifo(fifo_path, 0666);
@@ -35,34 +37,17 @@ void write_status_client(const std::string &message) {
   close(fd);
 }
 
-std::string read_block(Block block) {
-  std::ifstream file("memory", std::ios::binary);
-  file.seekg(block.start);
-  char block_str[BLK_SIZE + 1] = {0};
-  file.read(block_str, BLK_SIZE);
-  file.close();
-  return block_str;
-}
-
 void read_file(const char *filename, FATData &data, bool do_dir_check = true) {
-  std::string result;
-  auto file = data.files.find(filename);
-  if (file != data.files.end()) {
+  utils::Response response = utils::read_file(filename, data, do_dir_check);
 
-    if (do_dir_check && file->second.type != FileType::FILE) {
-      write_status_client("Ошибка: " + std::string(filename) +
-                          " является директорией");
-      return;
-    }
-
-    const FileInfo &fileInfo = file->second;
-    for (Block block : fileInfo.data) {
-      result += read_block(block);
-    }
-    write_status_client(result);
-  } else {
+  if (response.status == READ_DIR_ERR) {
+    write_status_client("Ошибка: " + std::string(filename) +
+                        " является директорией");
+  } else if (response.status == READ_NO_EXISTING_FILE) {
     std::string filename_str = filename;
     write_status_client("Файл с именем " + filename_str + " не существует");
+  } else {
+    write_status_client(response.result);
   }
 }
 
@@ -197,7 +182,7 @@ void update_parent_dir_content(std::string filepath, FATData &data) {
   auto file = data.files.find(parent_dir);
   const FileInfo &parent_dir_info = file->second;
   for (Block block : parent_dir_info.data) {
-    parent_dir_content += read_block(block);
+    parent_dir_content += utils::read_block(block);
   }
 
   parent_dir_content += "/" + file_basename;
@@ -284,17 +269,37 @@ void list_files(const char *filepath, FATData &data) {
     return;
   }
 
-  read_file(filepath, data, false); // TODO: for remove
-  return;                           // TODO: for remove
+  utils::Response response = utils::read_file(filepath, data, false);
+
+  if (response.status == READ_DIR_ERR) {
+    write_status_client("Ошибка: " + std::string(filepath) +
+                        " является директорией");
+    return;
+  } else if (response.status == READ_NO_EXISTING_FILE) {
+    std::string filename_str = filepath;
+    write_status_client("Файл с именем " + filename_str + " не существует");
+    return;
+  }
 
   std::string file_list;
   std::string dir_list;
 
-  for (auto &[filename, file_info] : data.files) {
-    if (file_info.type == FileType::FILE) {
-      file_list += filename + " ";
+  std::stringstream ss(response.result);
+  std::string file_system_object; // file, directory, etc.
+
+  while (std::getline(ss, file_system_object, '/')) {
+    if (data.files.find(file_system_object) == data.files.end()) {
+      // TODO: сделать отдельную ошибку
+      continue;
+    }
+
+    auto it = data.files.find(file_system_object);
+    FileType obj_type = it->second.type;
+
+    if (obj_type == FileType::FILE) {
+      file_list += file_system_object + " ";
     } else {
-      dir_list += filename + "/ ";
+      dir_list += file_system_object + "/ ";
     }
   }
 
