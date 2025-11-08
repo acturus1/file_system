@@ -293,8 +293,11 @@ void list_files(const char *filepath, FATData &data) {
   }
 
   while (std::getline(ss, file_system_object, '/')) {
-    if (file_system_object.empty())
+    if (file_system_object.empty()) {
+      write_status_client(
+          "Некорректный формат пути - пустое имя файла/директории");
       continue;
+    }
 
     std::string full_path = dir_path + file_system_object;
 
