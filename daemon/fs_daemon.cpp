@@ -335,9 +335,7 @@ void list_files(const char *filepath, FATData &data) {
   write_status_client(result);
 }
 
-int main() {
-  FATData data = read_FAT_from_disk();
-
+void prepare_FAT(FATData &data) {
   std::string root = "/";
   if (data.files.find(root) == data.files.end()) {
     FileInfo &fileinfo = data.files[root];
@@ -345,7 +343,11 @@ int main() {
     fileinfo.type = FileType::DIR;
     fileinfo.data.clear();
   }
+}
 
+int main() {
+  FATData data = read_FAT_from_disk();
+  prepare_FAT(data);
   debug_print_FAT(data);
 
   create_fifos();
