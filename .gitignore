@@ -1,4 +1,6 @@
 test/
+test_memory
+example_test
 memory
 FAT
 *.out

@@ -2,7 +2,7 @@
 #include <fstream>
 
 std::string utils::read_block(Block block) {
-  std::ifstream file("memory", std::ios::binary);
+  std::ifstream file(MEMORY_PATH, std::ios::binary);
   file.seekg(block.start);
   char block_str[BLK_SIZE + 1] = {0};
   file.read(block_str, BLK_SIZE);

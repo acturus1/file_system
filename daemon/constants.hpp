@@ -25,3 +25,10 @@ extern const char *fifo_path;
 extern const char *fifo_path_client;
 
 #endif
+
+#ifndef MEMORY_PATH_CONSTANT
+#define MEMORY_PATH_CONSTANT
+
+extern const char *MEMORY_PATH;
+
+#endif
