@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <fcntl.h>
+#include <filesystem>
 
 #include <fstream>
 #include <iostream>
@@ -102,6 +103,40 @@ bool all_filepath_unit_exist(FATData &data, std::string filepath) {
   return true;
 }
 
+void create_directory(const char *dirname, FATData &data) {
+  if (dirname == nullptr || dirname[0] == '\0') {
+    std::cerr << "Error no directory name" << std::endl;
+    write_status_client("Ошибка: не указано имя директории");
+    return;
+  }
+
+  std::string dirname_str = dirname;
+  if (file_already_exists(dirname_str, data, FileType::DIR)) {
+    write_status_client(std::string("Ошибка: директория '") + dirname +
+                        std::string("' уже существует"));
+    return;
+  }
+
+  FileInfo &dir_info = data.files[dirname_str];
+  dir_info.name = dirname_str;
+  dir_info.type = FileType::DIR;
+  dir_info.data.clear();
+
+  write_status_client("OK");
+}
+
+std::string get_parent_dir_path(std::string &filepath) {
+  size_t slash_pos = filepath.rfind('/');
+  std::string dirpath = filepath.substr(0, slash_pos);
+  return dirpath;
+}
+
+std::string get_basename(std::string &filepath) {
+  size_t slash_pos = filepath.rfind('/');
+  std::string dirpath = filepath.substr(slash_pos + 1, filepath.npos);
+  return dirpath;
+}
+
 void _write_file(std::string filepath_str, std::string text, FATData &data,
                  FileType type = FileType::FILE) {
   std::string whole_input = text;
@@ -139,30 +174,11 @@ void _write_file(std::string filepath_str, std::string text, FATData &data,
   }
 }
 
-std::string get_parent_dir_path(std::string &filepath) {
-  size_t slash_pos = filepath.rfind('/');
-  std::string dirpath = filepath.substr(0, slash_pos);
-  if (dirpath.empty()) {
-    dirpath = "/";
-  }
-  return dirpath;
-}
-
-std::string get_basename(std::string &filepath) {
-  size_t slash_pos = filepath.rfind('/');
-  std::string dirpath = filepath.substr(slash_pos + 1, filepath.npos);
-  return dirpath;
-}
-
 void update_parent_dir_content(std::string filepath, FATData &data) {
   std::string parent_dir = get_parent_dir_path(filepath);
   std::string file_basename = get_basename(filepath);
 
   std::string parent_dir_content;
-  if (data.files.find(parent_dir) == data.files.end()) {
-    write_status_client("Внутренняя ошибка: не удаётся получить содержимое "
-                        "родительской директории.");
-  }
   auto file = data.files.find(parent_dir);
   const FileInfo &parent_dir_info = file->second;
   for (Block block : parent_dir_info.data) {
@@ -177,30 +193,6 @@ void update_parent_dir_content(std::string filepath, FATData &data) {
   data.files.erase(parent_dir);
 
   _write_file(parent_dir, parent_dir_content, data, FileType::DIR);
-}
-
-void create_directory(const char *dirname, FATData &data) {
-  if (dirname == nullptr || dirname[0] == '\0') {
-    std::cerr << "Error no directory name" << std::endl;
-    write_status_client("Ошибка: не указано имя директории");
-    return;
-  }
-
-  std::string dirname_str = dirname;
-  if (file_already_exists(dirname_str, data, FileType::DIR)) {
-    write_status_client(std::string("Ошибка: директория '") + dirname +
-                        std::string("' уже существует"));
-    return;
-  }
-
-  update_parent_dir_content(dirname, data);
-
-  FileInfo &dir_info = data.files[dirname_str];
-  dir_info.name = dirname_str;
-  dir_info.type = FileType::DIR;
-  dir_info.data.clear();
-
-  write_status_client("OK");
 }
 
 void write_file(const char *filepath, const char *text, FATData &data) {
@@ -273,13 +265,17 @@ int edit_file(const char *filename, const char *text, FATData &data,
 
 void list_files(const char *filepath, FATData &data) {
   if (data.files.empty()) {
-    write_status_client("Пусто!");
+    write_status_client("");
     return;
   }
 
   utils::Response response = utils::read_file(filepath, data, false);
 
-  if (response.status == READ_NO_EXISTING_FILE) {
+  if (response.status == READ_DIR_ERR) {
+    write_status_client("Ошибка: " + std::string(filepath) +
+                        " является директорией");
+    return;
+  } else if (response.status == READ_NO_EXISTING_FILE) {
     std::string filename_str = filepath;
     write_status_client("Файл с именем " + filename_str + " не существует");
     return;
@@ -297,9 +293,8 @@ void list_files(const char *filepath, FATData &data) {
   }
 
   while (std::getline(ss, file_system_object, '/')) {
-    if (file_system_object.empty()) {
+    if (file_system_object.empty())
       continue;
-    }
 
     std::string full_path = dir_path + file_system_object;
 
@@ -323,31 +318,17 @@ void list_files(const char *filepath, FATData &data) {
   std::string result;
   if (!dir_list.empty()) {
     result += "Директории: " + dir_list + "\n";
-  } else {
-    result += "Нет вложенных директорий\n";
   }
   if (!file_list.empty()) {
     result += "Файлы: " + file_list;
-  } else {
-    result += "Нет вложенных файлов\n";
   }
 
   write_status_client(result);
 }
 
-void prepare_FAT(FATData &data) {
-  std::string root = "/";
-  if (data.files.find(root) == data.files.end()) {
-    FileInfo &fileinfo = data.files[root];
-    fileinfo.name = root;
-    fileinfo.type = FileType::DIR;
-    fileinfo.data.clear();
-  }
-}
-
 int main() {
   FATData data = read_FAT_from_disk();
-  prepare_FAT(data);
+
   debug_print_FAT(data);
 
   create_fifos();

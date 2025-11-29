@@ -1,6 +1,5 @@
-#include <gtest/gtest.h>
-
 #include "../../daemon/model/fat_data.hpp"
+#include <gtest/gtest.h>
 
 void write_file(const char *filepath, const char *text, FATData &data);
 void prepare_FAT(FATData &data);
@@ -16,4 +15,9 @@ TEST(WriteFileTest, CheckFATDataUpdated) {
   EXPECT_EQ(file_info.name, file_path);
   EXPECT_EQ(file_info.type, FileType::FILE);
   // добавить проверку на контент
+}
+
+int main(int argc, char **argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }
