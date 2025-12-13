@@ -8,6 +8,10 @@ int main() {
   create_fifos();
 
   int fd = open(fifo_path, O_RDONLY);
+  if (fd == -1) {
+    perror("Ошибка открытия FIFO для записи серверу");
+    return 1;
+  }
   char buffer[1024];
   while (true) {
     ssize_t bytes_read = read(fd, buffer, sizeof(buffer) - 1);

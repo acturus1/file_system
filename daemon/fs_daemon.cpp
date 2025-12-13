@@ -55,7 +55,7 @@ void delete_block(Block &block, FATData &data) {
 }
 
 void write_block(std::string block, long long pos_start) {
-  std::cout << "Block: " << block << "\n";
+  // std::cout << "Block: " << block << "\n";
 
   std::fstream file;
   file.open(MEMORY_PATH, std::ios::in | std::ios::out | std::ios::binary);

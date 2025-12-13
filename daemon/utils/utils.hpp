@@ -3,6 +3,7 @@
 
 #include "../constants.hpp"
 
+const int OK = 0;
 const int READ_DIR_ERR = 1;
 const int READ_NO_EXISTING_FILE = 2;
 
