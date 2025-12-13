@@ -29,5 +29,6 @@ utils::Response utils::read_file(const char *filename, FATData &data,
   for (Block block : fileInfo.data) {
     response.result += read_block(block);
   }
+  response.status = OK;
   return response;
 }
