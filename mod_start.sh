@@ -8,14 +8,14 @@ CLEAN=0
 
 cd daemon
 if (( DEBUG )); then
-  g++ fs_daemon.cpp -o server.out -g
+  g++ main.cpp constants.cpp utils/read.cpp -o ../server.out -g
 else
-  g++ fs_daemon.cpp -o server.out
+  g++ main.cpp constants.cpp utils/read.cpp -o ../server.out
 fi
 cd ..
 
 cd client
-g++ client.cpp -o client.out
+g++ client.cpp -o ../client.out
 cd ..
 
 cleanup() {

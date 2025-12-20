@@ -4,7 +4,7 @@
 #include <stdexcept>
 #include <string>
 
-#include "constants.cpp"
+#include "constants.hpp"
 
 #include "model/fat_data.hpp"
 

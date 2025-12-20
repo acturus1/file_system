@@ -27,7 +27,7 @@ int main() {
       break;
     }
 
-    if (message.find("write ") == 0) {
+    if (message.find("write ") == 0) { // BUG: edit /write slkdfjlsdkfj
       message.replace(0, 5, "w");
     } else if (message.find("edit ") == 0) {
       message.replace(0, 4, "e");
@@ -37,8 +37,8 @@ int main() {
       message.replace(0, 5, "m");
     } else if (message.find("delete ") == 0) {
       message.replace(0, 6, "x");
-    } else if (message.find("ls") == 0) {
-      message = "l";
+    } else if (message.find("ls ") == 0) {
+      message.replace(0, 2, "l");
     } else {
       std::cout << "Неизвестная команда: " << message << std::endl;
       continue;
