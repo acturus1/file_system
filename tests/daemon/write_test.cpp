@@ -48,7 +48,7 @@ TEST(DeleteFileTest, CheckDeleteFileFromFat) {
   delete_file(file_path, data);
   EXPECT_EQ(data.files.find(file_path), data.files.end());
 };
-TEST(DeleteFileTest, CheckDeleteFileFromMemory);
+
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   int result = RUN_ALL_TESTS();
