@@ -162,6 +162,7 @@ void update_parent_dir_content(std::string filepath, FATData &data) {
   if (data.files.find(parent_dir) == data.files.end()) {
     write_status_client("Внутренняя ошибка: не удаётся получить содержимое "
                         "родительской директории.");
+    return;
   }
   auto file = data.files.find(parent_dir);
   const FileInfo &parent_dir_info = file->second;
@@ -179,6 +180,35 @@ void update_parent_dir_content(std::string filepath, FATData &data) {
   _write_file(parent_dir, parent_dir_content, data, FileType::DIR);
 }
 
+void delete_parent_dir_content(std::string filepath, FATData &data) {
+  std::string parent_dir = get_parent_dir_path(filepath);
+  std::string file_basename = get_basename(filepath);
+
+  std::string parent_dir_content;
+  if (data.files.find(parent_dir) == data.files.end()) {
+    write_status_client("Внутренняя ошибка: не удаётся получить содержимое "
+                        "родительской директории.");
+    return;
+  }
+  auto file = data.files.find(parent_dir);
+  const FileInfo &parent_dir_info = file->second;
+  for (Block block : parent_dir_info.data) {
+    parent_dir_content += utils::read_block(block);
+  }
+
+  int pos = parent_dir_content.find("/" + file_basename);
+  if (parent_dir_content.find("/" + file_basename + "/") != std::string::npos) {
+    pos = parent_dir_content.find("/" + file_basename + "/");
+  }
+  parent_dir_content.replace(pos, file_basename.size() + 1, "");
+
+  for (Block block : parent_dir_info.data) {
+    delete_block(block, data);
+  }
+  data.files.erase(parent_dir);
+
+  _write_file(parent_dir, parent_dir_content, data, FileType::DIR);
+};
 void create_directory(const char *dirname, FATData &data) {
   if (dirname == nullptr || dirname[0] == '\0') {
     std::cerr << "Error no directory name" << std::endl;
@@ -241,7 +271,7 @@ int delete_file(const char *filename, FATData &data) {
   for (Block block : file_to_delete.data) {
     delete_block(block, data);
   }
-  // update_parent_dir_content("/", data);
+  delete_parent_dir_content(filename, data);
   data.files.erase(filename_str);
   return 0;
 }
