@@ -241,6 +241,7 @@ int delete_file(const char *filename, FATData &data) {
   for (Block block : file_to_delete.data) {
     delete_block(block, data);
   }
+  // update_parent_dir_content("/", data);
   data.files.erase(filename_str);
   return 0;
 }

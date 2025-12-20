@@ -9,6 +9,7 @@ void write_file(const char *filepath, const char *text, FATData &data);
 void prepare_FAT(FATData &data);
 utils::Response utils::read_file(const char *filename, FATData &data,
                                  bool do_dir_check);
+int delete_file(const char *filename, FATData &data);
 
 const char *file_path = "/f1";
 const char *file_content = "f1content";
@@ -43,6 +44,11 @@ TEST(ReadFileTest, CheckFATDataUpdatedAndMemory) {
   EXPECT_EQ(std::string(file_content), result.result);
 }
 
+TEST(DeleteFileTest, CheckDeleteFileFromFat) {
+  delete_file(file_path, data);
+  EXPECT_EQ(data.files.find(file_path), data.files.end());
+};
+TEST(DeleteFileTest, CheckDeleteFileFromMemory);
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   int result = RUN_ALL_TESTS();
