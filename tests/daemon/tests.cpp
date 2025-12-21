@@ -13,9 +13,11 @@ utils::Response utils::read_file(const char *filename, FATData &data,
 int delete_file(const char *filename, FATData &data);
 int edit_file(const char *filename, const char *text, FATData &data,
               bool do_user_checks = true);
+std::string list_files(const char *file_path, FATData &data);
 
 const char *file_path = "/f1";
 const char *file_content = "f1content";
+const char *new_content = "new_content";
 FATData data;
 
 TEST(WriteFileTest, CheckFATDataUpdated) {
@@ -53,8 +55,7 @@ TEST(DeleteFileTest, CheckDeleteFileFromFat) {
   EXPECT_EQ(data.files.find(file_path), data.files.end());
 };
 
-TEST(EditFileTest, EditFileTestFat) {
-  const char *new_content = "new_content";
+TEST(EditFileTest, EditFileTestMemory) {
   write_file(file_path, file_content, data);
   edit_file(file_path, "new_content", data);
   std::ifstream memory_test("./test_memory", std::ios::binary);
@@ -67,18 +68,29 @@ TEST(EditFileTest, EditFileTestFat) {
       result += output[i];
     }
   }
-  std::string combined = std::string(file_path) + std::string(new_content);
+  std::string file_path_and_new_content =
+      std::string(file_path) + std::string(new_content);
 
   std::string sorted_result = result;
-  std::string sorted_combined = combined;
+  std::string sorted_file_path_and_new_content = file_path_and_new_content;
 
   std::sort(sorted_result.begin(), sorted_result.end());
-  std::sort(sorted_combined.begin(), sorted_combined.end());
+  std::sort(sorted_file_path_and_new_content.begin(),
+            sorted_file_path_and_new_content.end());
 
-  ASSERT_EQ(sorted_result, sorted_combined);
+  ASSERT_EQ(sorted_result, sorted_file_path_and_new_content);
   memory_test.close();
 };
 
+TEST(ListFileTest, ListFileTestFat) {
+  std::string result = list_files("/", data);
+  if (!result.empty() && result.back() == ' ') {
+    result.pop_back();
+  };
+  std::string list_file = file_path;
+  list_file.erase(0, 1);
+  EXPECT_EQ(result, list_file);
+};
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   int result = RUN_ALL_TESTS();
