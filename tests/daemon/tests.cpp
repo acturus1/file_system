@@ -14,10 +14,12 @@ int delete_file(const char *filename, FATData &data);
 int edit_file(const char *filename, const char *text, FATData &data,
               bool do_user_checks = true);
 std::string list_files(const char *file_path, FATData &data);
+void create_directory(const char *dirname, FATData &data);
 
 const char *file_path = "/f1";
 const char *file_content = "f1content";
 const char *new_content = "new_content";
+const char *dirname = "/dir1";
 FATData data;
 
 TEST(WriteFileTest, CheckFATDataUpdated) {
@@ -49,11 +51,6 @@ TEST(ReadFileTest, CheckFATDataUpdatedAndMemory) {
   ASSERT_EQ(OK, result.status);
   EXPECT_EQ(std::string(file_content), result.result);
 }
-
-TEST(DeleteFileTest, CheckDeleteFileFromFat) {
-  delete_file(file_path, data);
-  EXPECT_EQ(data.files.find(file_path), data.files.end());
-};
 
 TEST(EditFileTest, EditFileTestMemory) {
   write_file(file_path, file_content, data);
@@ -91,6 +88,21 @@ TEST(ListFileTest, ListFileTestFat) {
   list_file.erase(0, 1);
   EXPECT_EQ(result, list_file);
 };
+
+TEST(DeleteFileTest, CheckDeleteFileFromFat) {
+  delete_file(file_path, data);
+  EXPECT_EQ(data.files.find(file_path), data.files.end());
+};
+
+TEST(Dir, MakeDirectory) {
+  create_directory(dirname, data);
+  EXPECT_NE(data.files.find(dirname), data.files.end());
+  FileInfo dir_info = data.files[dirname];
+
+  EXPECT_EQ(dir_info.name, dirname);
+  EXPECT_EQ(dir_info.type, FileType::DIR);
+}
+
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   int result = RUN_ALL_TESTS();
