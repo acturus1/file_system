@@ -96,11 +96,17 @@ TEST(DeleteFileTest, CheckDeleteFileFromFat) {
 
 TEST(Dir, MakeDirectory) {
   create_directory(dirname, data);
-  EXPECT_NE(data.files.find(dirname), data.files.end());
+  ASSERT_NE(data.files.find(dirname),
+            data.files.end()); // есть ли в data.files dirname?
   FileInfo dir_info = data.files[dirname];
 
   EXPECT_EQ(dir_info.name, dirname);
   EXPECT_EQ(dir_info.type, FileType::DIR);
+};
+
+TEST(Dir, DeleteDir) {
+  delete_file(dirname, data);
+  ASSERT_EQ(data.files.find(dirname), data.files.end());
 }
 
 int main(int argc, char **argv) {
