@@ -298,14 +298,15 @@ int edit_file(const char *filename, const char *text, FATData &data,
   }
   data.files.erase(filename_str);
 
+  delete_parent_dir_content(filename, data);
   write_file(filename, text, data);
   return 0;
 }
 
-void list_files(const char *filepath, FATData &data) {
+std::string list_files(const char *filepath, FATData &data) {
   if (data.files.empty()) {
     write_status_client("Пусто!");
-    return;
+    return "Пусто!";
   }
 
   utils::Response response = utils::read_file(filepath, data, false);
@@ -313,7 +314,7 @@ void list_files(const char *filepath, FATData &data) {
   if (response.status == READ_NO_EXISTING_FILE) {
     std::string filename_str = filepath;
     write_status_client("Файл с именем " + filename_str + " не существует");
-    return;
+    return "Файл с именем " + filename_str + " не существует";
   }
 
   std::string file_list;
@@ -351,19 +352,22 @@ void list_files(const char *filepath, FATData &data) {
     }
   }
 
-  std::string result;
+  std::string result, result_simple;
   if (!dir_list.empty()) {
     result += "Директории: " + dir_list + "\n";
+    result_simple += dir_list;
   } else {
     result += "Нет вложенных директорий\n";
   }
   if (!file_list.empty()) {
     result += "Файлы: " + file_list;
+    result_simple += file_list;
   } else {
     result += "Нет вложенных файлов\n";
   }
 
   write_status_client(result);
+  return result_simple;
 }
 
 void prepare_FAT(FATData &data) {
