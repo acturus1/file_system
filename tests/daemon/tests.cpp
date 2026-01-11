@@ -13,8 +13,9 @@ utils::Response utils::read_file(const char *filename, FATData &data,
 int delete_file(const char *filename, FATData &data);
 int edit_file(const char *filename, const char *text, FATData &data,
               bool do_user_checks = true);
-std::string list_files(const char *file_path, FATData &data);
 void create_directory(const char *dirname, FATData &data);
+
+utils::Response utils::list_files(const char *filepath, FATData &data);
 
 const char *file_path = "/f1";
 const char *file_content = "f1content";
@@ -79,8 +80,11 @@ TEST(EditFileTest, EditFileTestMemory) {
   memory_test.close();
 };
 
-TEST(ListFileTest, ListFileTestFat) {
-  std::string result = list_files("/", data);
+TEST(ListFileTest, ListRootDirectory) {
+  utils::Response response = utils::list_files("/", data);
+
+  ASSERT_EQ(response.status, OK);
+  std::string result = response.result;
   if (!result.empty() && result.back() == ' ') {
     result.pop_back();
   };
@@ -88,6 +92,11 @@ TEST(ListFileTest, ListFileTestFat) {
   list_file.erase(0, 1);
   EXPECT_EQ(result, list_file);
 };
+
+TEST(ListFileTest, ListNotExistingDirectory) {
+  utils::Response response = utils::list_files("/not_existing_directory", data);
+  ASSERT_EQ(response.status, LS_NO_EXISTING_DIR);
+}
 
 TEST(DeleteFileTest, CheckDeleteFileFromFat) {
   delete_file(file_path, data);
