@@ -303,71 +303,18 @@ int edit_file(const char *filename, const char *text, FATData &data,
   return 0;
 }
 
-std::string list_files(const char *filepath, FATData &data) {
-  if (data.files.empty()) {
+void list_files(const char *filepath, FATData &data) {
+  utils::Response answer = utils::list_files(filepath, data);
+  if (answer.status == OK && answer.result == "") {
     write_status_client("Пусто!");
-    return "Пусто!";
   }
 
-  utils::Response response = utils::read_file(filepath, data, false);
-
-  if (response.status == READ_NO_EXISTING_FILE) {
+  if (answer.status == LS_NO_EXISTING_DIR && answer.result == "") {
     std::string filename_str = filepath;
     write_status_client("Файл с именем " + filename_str + " не существует");
-    return "Файл с именем " + filename_str + " не существует";
   }
 
-  std::string file_list;
-  std::string dir_list;
-
-  std::stringstream ss(response.result);
-  std::string file_system_object; // file, directory, etc.
-
-  std::string dir_path = filepath;
-  if (dir_path.back() != '/') {
-    dir_path += '/';
-  }
-
-  while (std::getline(ss, file_system_object, '/')) {
-    if (file_system_object.empty()) {
-      continue;
-    }
-
-    std::string full_path = dir_path + file_system_object;
-
-    if (data.files.find(full_path) == data.files.end()) {
-      full_path = dir_path + file_system_object + "/";
-      if (data.files.find(full_path) == data.files.end()) {
-        continue;
-      }
-    }
-
-    auto it = data.files.find(full_path);
-    FileType obj_type = it->second.type;
-
-    if (obj_type == FileType::FILE) {
-      file_list += file_system_object + " ";
-    } else {
-      dir_list += file_system_object + "/ ";
-    }
-  }
-
-  std::string result, result_simple;
-  if (!dir_list.empty()) {
-    result += "Директории: " + dir_list + "\n";
-    result_simple += dir_list;
-  } else {
-    result += "Нет вложенных директорий\n";
-  }
-  if (!file_list.empty()) {
-    result += "Файлы: " + file_list;
-    result_simple += file_list;
-  } else {
-    result += "Нет вложенных файлов\n";
-  }
-
-  write_status_client(result);
-  return result_simple;
+  write_status_client(answer.result);
 }
 
 void prepare_FAT(FATData &data) {
