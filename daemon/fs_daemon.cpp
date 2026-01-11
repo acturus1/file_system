@@ -209,6 +209,7 @@ void delete_parent_dir_content(std::string filepath, FATData &data) {
 
   _write_file(parent_dir, parent_dir_content, data, FileType::DIR);
 };
+
 void create_directory(const char *dirname, FATData &data) {
   if (dirname == nullptr || dirname[0] == '\0') {
     std::cerr << "Error no directory name" << std::endl;
@@ -259,6 +260,47 @@ void write_file(const char *filepath, const char *text, FATData &data) {
   write_status_client("OK");
 }
 
+std::string recursive_delete_directory(std::string dirpath, FATData &data) {
+
+  utils::Response response = utils::read_file(dirpath.c_str(), data, false);
+  std::string file_list;
+  std::string dir_list;
+  std::string dir_path = dirpath;
+  std::stringstream ss(response.result);
+  std::string file_system_object; // file, directory, etc.
+  std::string result;
+
+  if (dir_path.back() != '/') {
+    dir_path += '/';
+  }
+
+  while (std::getline(ss, file_system_object, '/')) {
+    if (file_system_object.empty()) {
+      continue;
+    }
+
+    std::string full_path = dir_path + file_system_object;
+
+    if (data.files.find(full_path) == data.files.end()) {
+      full_path = dir_path + file_system_object + "/";
+      if (data.files.find(full_path) == data.files.end()) {
+        continue;
+      }
+    }
+
+    auto it = data.files.find(full_path);
+    FileType obj_type = it->second.type;
+    if (obj_type == FileType::FILE) {
+      result += dir_path + file_system_object + "|";
+    } else {
+      result += dir_path + file_system_object + "|";
+      result += recursive_delete_directory(dir_path + file_system_object, data);
+    }
+  }
+
+  return result;
+}
+
 int delete_file(const char *filename, FATData &data) {
   std::string filename_str = filename;
   if (data.files.find(filename_str) == data.files.end()) {
@@ -267,8 +309,33 @@ int delete_file(const char *filename, FATData &data) {
     return 1;
   }
 
-  FileInfo file_to_delete = data.files[filename_str];
-  for (Block block : file_to_delete.data) {
+  FileInfo file_info = data.files[filename];
+  if (!file_info.data.empty() && file_info.type == FileType::DIR) {
+    std::string input = recursive_delete_directory(filename_str, data);
+    std::cout << input << std::endl;
+    std::vector<std::string> result;
+    std::stringstream ss(input);
+    std::string token;
+    while (std::getline(ss, token, '|')) {
+      result.push_back(token);
+    }
+
+    for (int i = result.size() - 1; i >= 0; --i) {
+      delete_file(result[i].c_str(), data);
+    }
+    for (Block block : file_info.data) {
+      delete_block(block, data);
+    }
+    delete_parent_dir_content(filename, data);
+    data.files.erase(filename_str);
+  }
+  // FileInfo dir_info = data.files[filename];
+  // if (!dir_info.data.empty() && dir_info.type == FileType::DIR) {
+  //   write_status_client("Дериктория не пустая");
+  //   return 1;
+  // }
+
+  for (Block block : file_info.data) {
     delete_block(block, data);
   }
   delete_parent_dir_content(filename, data);
