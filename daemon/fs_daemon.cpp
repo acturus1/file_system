@@ -224,6 +224,13 @@ void create_directory(const char *dirname, FATData &data) {
     return;
   }
 
+  if (!all_filepath_unit_exist(data, dirname)) {
+    write_status_client(
+        std::string("Ошибка: не существует какого-то из звеньев пути ") +
+        dirname);
+    return;
+  }
+
   update_parent_dir_content(dirname, data);
 
   FileInfo &dir_info = data.files[dirname_str];
@@ -315,19 +322,21 @@ int delete_file(const char *filename, FATData &data) {
     std::cout << input << std::endl;
     std::vector<std::string> result;
     std::stringstream ss(input);
+    // |d1|f1|f2|
     std::string token;
     while (std::getline(ss, token, '|')) {
       result.push_back(token);
     }
 
-    for (int i = result.size() - 1; i >= 0; --i) {
-      delete_file(result[i].c_str(), data);
-    }
-    for (Block block : file_info.data) {
-      delete_block(block, data);
-    }
-    delete_parent_dir_content(filename, data);
-    data.files.erase(filename_str);
+    // for (int i = result.size() - 1; i >= 0; --i) {
+    //   delete_file(result[i].c_str(), data);
+    // }
+    // for (Block block : file_info.data) {
+    //   delete_block(block, data);
+    // }
+    // delete_parent_dir_content(filename, data);
+    // data.files.erase(filename_str);
+    return 0;
   }
   // FileInfo dir_info = data.files[filename];
   // if (!dir_info.data.empty() && dir_info.type == FileType::DIR) {
