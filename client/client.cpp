@@ -39,6 +39,8 @@ int main() {
       message.replace(0, 6, "x");
     } else if (message.find("ls ") == 0) {
       message.replace(0, 2, "l");
+    } else if (message.find("tree") == 0) {
+      message.replace(0, 4, "t");
     } else {
       std::cout << "Неизвестная команда: " << message << std::endl;
       continue;

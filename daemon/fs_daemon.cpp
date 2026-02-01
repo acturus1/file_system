@@ -391,6 +391,49 @@ void list_files(const char *filepath, FATData &data) {
   write_status_client(answer.result);
 }
 
+std::string cout_recursive_(FATData &data, std::string dirname, int depth) {
+  if (dirname == "/") {
+    return "";
+  }
+  std::string result;
+  std::string indent(depth * 2, ' ');
+
+  for (const auto &[key, fileinfo] : data.files) {
+    size_t last_slash = key.find_last_of('/');
+    std::string parent;
+
+    if (last_slash == 0) {
+      parent = "/";
+    } else if (last_slash != std::string::npos) {
+      parent = key.substr(0, last_slash);
+    } else {
+      parent = "";
+    }
+
+    if (parent == dirname) {
+      std::string name = key.substr(last_slash + 1);
+
+      if (fileinfo.type == FileType::DIR) {
+        result += indent + name + " D\n";
+        result += cout_recursive_(data, key, depth + 1);
+      } else {
+        result += indent + name + " F\n";
+      }
+    }
+  }
+  return result;
+}
+
+void cout_recursive(FATData &data, std::string dirname, int depth = 0) {
+  std::string result = "\n" + cout_recursive_(data, dirname, depth);
+
+  if (result.empty()) {
+    write_status_client("пусто");
+  } else {
+    write_status_client(result);
+  }
+}
+
 void prepare_FAT(FATData &data) {
   std::string root = "/";
   if (data.files.find(root) == data.files.end()) {
