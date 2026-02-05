@@ -14,16 +14,16 @@ utils::Response utils::read_file(const char *filename, FATData &data,
 int delete_file(const char *filename, FATData &data);
 int edit_file(const char *filename, const char *text, FATData &data,
               bool do_user_checks = true);
-void create_directory(const char *dirname, FATData &data);
+void create_directory(const char *dirpath, FATData &data);
 
 utils::Response utils::list_files(const char *filepath, FATData &data);
 
 const char *file_path = "/f1";
 const char *file_content = "f1content";
 const char *new_content = "new_content";
-const char *dirname1 = "/dir1";
-const char *dirname2 = "/dir2";
-const char *dirname3 = "/dir3";
+const char *dirpath1 = "/dir1";
+const char *dirpath2 = "/dir2";
+const char *dirpath3 = "/dir3";
 const char *file_path2 = "/f2";
 
 class FileSystemTest : public ::testing::Test {
@@ -126,54 +126,54 @@ TEST_F(FileSystemTest, CheckDeleteFileFromFat) {
 };
 
 TEST_F(FileSystemTest, MakeDirectory) {
-  create_directory(dirname1, data);
-  ASSERT_NE(data.files.find(dirname1), data.files.end());
-  FileInfo dir_info = data.files[dirname1];
+  create_directory(dirpath1, data);
+  ASSERT_NE(data.files.find(dirpath1), data.files.end());
+  FileInfo dir_info = data.files[dirpath1];
 
-  EXPECT_EQ(dir_info.name, dirname1);
+  EXPECT_EQ(dir_info.name, dirpath1);
   EXPECT_EQ(dir_info.type, FileType::DIR);
 };
 
 TEST_F(FileSystemTest, DeleteDir) {
-  delete_file(dirname1, data);
-  ASSERT_EQ(data.files.find(dirname1), data.files.end());
+  delete_file(dirpath1, data);
+  ASSERT_EQ(data.files.find(dirpath1), data.files.end());
 }
 
 TEST_F(FileSystemTest, LsTest1) {
-  create_directory(dirname1, data);
-  create_directory((std::string(dirname1) + std::string(dirname2)).c_str(),
+  create_directory(dirpath1, data);
+  create_directory((std::string(dirpath1) + std::string(dirpath2)).c_str(),
                    data);
-  create_directory((std::string(dirname1) + std::string(dirname3)).c_str(),
+  create_directory((std::string(dirpath1) + std::string(dirpath3)).c_str(),
                    data);
-  utils::Response response = utils::list_files(dirname1, data);
+  utils::Response response = utils::list_files(dirpath1, data);
   std::string reformed_d2 =
-      std::string(dirname2).substr(1, std::string(dirname2).size() - 1) + "/ ";
+      std::string(dirpath2).substr(1, std::string(dirpath2).size() - 1) + "/ ";
   std::string reformed_d3 =
-      std::string(dirname3).substr(1, std::string(dirname3).size() - 1) + "/ ";
+      std::string(dirpath3).substr(1, std::string(dirpath3).size() - 1) + "/ ";
   EXPECT_EQ(response.result, reformed_d2 + reformed_d3);
 }
 
 TEST_F(FileSystemTest, LsTest2) {
-  create_directory(dirname1, data);
-  create_directory((std::string(dirname1) + std::string(dirname2)).c_str(),
+  create_directory(dirpath1, data);
+  create_directory((std::string(dirpath1) + std::string(dirpath2)).c_str(),
                    data);
-  create_directory((std::string(dirname1) + std::string(dirname3)).c_str(),
+  create_directory((std::string(dirpath1) + std::string(dirpath3)).c_str(),
                    data);
   std::string reformed_d3 =
-      std::string(dirname3).substr(1, std::string(dirname3).size() - 1) + "/ ";
+      std::string(dirpath3).substr(1, std::string(dirpath3).size() - 1) + "/ ";
 
-  delete_file((std::string(dirname1) + std::string(dirname2)).c_str(), data);
-  utils::Response response = utils::list_files(dirname1, data);
+  delete_file((std::string(dirpath1) + std::string(dirpath2)).c_str(), data);
+  utils::Response response = utils::list_files(dirpath1, data);
   EXPECT_EQ(response.result, reformed_d3);
 }
 
 TEST_F(FileSystemTest, LsTest3) {
-  create_directory(dirname1, data);
-  write_file((std::string(dirname1) + std::string(file_path)).c_str(),
+  create_directory(dirpath1, data);
+  write_file((std::string(dirpath1) + std::string(file_path)).c_str(),
              file_content, data);
-  write_file((std::string(dirname1) + std::string(file_path2)).c_str(),
+  write_file((std::string(dirpath1) + std::string(file_path2)).c_str(),
              file_content, data);
-  utils::Response response = utils::list_files(dirname1, data);
+  utils::Response response = utils::list_files(dirpath1, data);
 
   std::string reformed_f1 =
       std::string(file_path).substr(1, std::string(file_path).size() - 1) + " ";
@@ -182,6 +182,16 @@ TEST_F(FileSystemTest, LsTest3) {
       " ";
 
   EXPECT_EQ(response.result, reformed_f1 + reformed_f2);
+}
+
+TEST_F(FileSystemTest, FileEndCorrectSimbol) {
+  create_directory((std::string(dirpath1) + "/").c_str(), data);
+  EXPECT_EQ(data.files.find(dirpath1), data.files.end());
+}
+
+TEST_F(FileSystemTest, DirEndCorrectSimbol) {
+  create_directory((std::string(dirpath1) + "/").c_str(), data);
+  EXPECT_EQ(data.files.find(dirpath1), data.files.end());
 }
 
 int main(int argc, char **argv) {
