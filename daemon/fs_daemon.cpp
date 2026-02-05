@@ -1,9 +1,8 @@
 #include <cstdlib>
+#include <cstring>
 #include <fcntl.h>
-
 #include <fstream>
 #include <iostream>
-#include <iterator>
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
@@ -211,31 +210,35 @@ void delete_parent_dir_content(std::string filepath, FATData &data) {
   _write_file(parent_dir, parent_dir_content, data, FileType::DIR);
 };
 
-void create_directory(const char *dirname, FATData &data) {
-  if (dirname == nullptr || dirname[0] == '\0') {
-    std::cerr << "Error no directory name" << std::endl;
+void create_directory(const char *dirpath, FATData &data) {
+  if (dirpath == nullptr || dirpath[0] == '\0') {
     write_status_client("Ошибка: не указано имя директории");
     return;
   }
 
-  std::string dirname_str = dirname;
-  if (file_already_exists(dirname_str, data, FileType::DIR)) {
-    write_status_client(std::string("Ошибка: директория '") + dirname +
+  if (dirpath[std::strlen(dirpath) - 1] == '/') {
+    write_status_client("Ошибка: имя дериктории не должно заканчиваться на /");
+    return;
+  }
+
+  std::string dirpath_str = dirpath;
+  if (file_already_exists(dirpath_str, data, FileType::DIR)) {
+    write_status_client(std::string("Ошибка: директория '") + dirpath +
                         std::string("' уже существует"));
     return;
   }
 
-  if (!all_filepath_unit_exist(data, dirname)) {
+  if (!all_filepath_unit_exist(data, dirpath)) {
     write_status_client(
         std::string("Ошибка: не существует какого-то из звеньев пути ") +
-        dirname);
+        dirpath);
     return;
   }
 
-  update_parent_dir_content(dirname, data);
+  update_parent_dir_content(dirpath, data);
 
-  FileInfo &dir_info = data.files[dirname_str];
-  dir_info.name = dirname_str;
+  FileInfo &dir_info = data.files[dirpath_str];
+  dir_info.name = dirpath_str;
   dir_info.type = FileType::DIR;
   dir_info.data.clear();
 
@@ -246,6 +249,10 @@ void write_file(const char *filepath, const char *text, FATData &data) {
   if (filepath == nullptr || filepath[0] == '\0') {
     std::cerr << "Error no filename" << std::endl;
     write_status_client("Ошибка: не указано имя файла");
+    return;
+  }
+  if (filepath[std::strlen(filepath) - 1] == '/') {
+    write_status_client("Ошибка: имя дериктории не должно заканчиваться на /");
     return;
   }
 
@@ -391,10 +398,10 @@ void list_files(const char *filepath, FATData &data) {
   write_status_client(answer.result);
 }
 
-std::string cout_recursive_(FATData &data, std::string dirname, int depth) {
-  if (dirname == "/") {
-    return "";
-  }
+std::string cout_recursive_(FATData &data, std::string dirpath, int depth) {
+  // if (dirpath == "/") {
+  //   return "";
+  // }
   std::string result;
   std::string indent(depth * 2, ' ');
 
@@ -410,7 +417,7 @@ std::string cout_recursive_(FATData &data, std::string dirname, int depth) {
       parent = "";
     }
 
-    if (parent == dirname) {
+    if (parent == dirpath) {
       std::string name = key.substr(last_slash + 1);
 
       if (fileinfo.type == FileType::DIR) {
@@ -424,13 +431,30 @@ std::string cout_recursive_(FATData &data, std::string dirname, int depth) {
   return result;
 }
 
-void cout_recursive(FATData &data, std::string dirname, int depth = 0) {
-  std::string result = "\n" + cout_recursive_(data, dirname, depth);
+void cout_recursive(FATData &data, std::string dirpath, int depth = 0) {
+  auto file = data.files.find(dirpath);
 
-  if (result.empty()) {
-    write_status_client("пусто");
-  } else {
-    write_status_client(result);
+  if (file == data.files.end()) {
+    write_status_client(std::string("Ошибка: нет такой дериктории ") + dirpath);
+    return;
+  }
+  if (data.files[dirpath].type != FileType::DIR) {
+    write_status_client("Ошибка: " + dirpath + " не является директорией");
+    return;
+  }
+
+  if (!all_filepath_unit_exist(data, dirpath)) {
+    write_status_client(
+        std::string("Ошибка: не существует какого-то из звеньев пути ") +
+        dirpath);
+    return;
+
+    std::string result = "\n" + cout_recursive_(data, dirpath, depth);
+    if (result.empty()) {
+      write_status_client("пусто");
+    } else {
+      write_status_client(result);
+    }
   }
 }
 
