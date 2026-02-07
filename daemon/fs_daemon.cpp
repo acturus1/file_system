@@ -399,35 +399,38 @@ void list_files(const char *filepath, FATData &data) {
 }
 
 std::string cout_recursive_(FATData &data, std::string dirpath, int depth) {
-  // if (dirpath == "/") {
-  //   return "";
-  // }
+  std::cout << "OwO:" << dirpath << std::endl;
   std::string result;
   std::string indent(depth * 2, ' ');
 
-  for (const auto &[key, fileinfo] : data.files) {
-    size_t last_slash = key.find_last_of('/');
-    std::string parent;
+  if (dirpath != "/" && dirpath[dirpath.length() - 1] == '/') {
+    dirpath = dirpath.substr(0, dirpath.length() - 1);
+  }
 
-    if (last_slash == 0) {
-      parent = "/";
-    } else if (last_slash != std::string::npos) {
-      parent = key.substr(0, last_slash);
-    } else {
-      parent = "";
-    }
+  utils::Response answer = utils::list_files(dirpath.c_str(), data);
+  std::cout << answer.result << std::endl;
+  std::string text = answer.result;
+  std::string segment;
+  std::stringstream ss(text);
+  std::vector<std::string> seglist;
 
-    if (parent == dirpath) {
-      std::string name = key.substr(last_slash + 1);
+  while (std::getline(ss, segment, ' ')) {
+    seglist.push_back(segment);
+  }
 
-      if (fileinfo.type == FileType::DIR) {
-        result += indent + name + " D\n";
-        result += cout_recursive_(data, key, depth + 1);
+  for (const std::string &s : seglist) {
+    if (s[s.length() - 1] == '/') {
+      result += indent + s + " D\n";
+      if (dirpath == "/") {
+        result += cout_recursive_(data, dirpath + s, depth + 1);
       } else {
-        result += indent + name + " F\n";
+        result += cout_recursive_(data, dirpath + "/" + s, depth + 1);
       }
+    } else {
+      result += indent + s + " F\n";
     }
   }
+
   return result;
 }
 
@@ -448,13 +451,13 @@ void cout_recursive(FATData &data, std::string dirpath, int depth = 0) {
         std::string("Ошибка: не существует какого-то из звеньев пути ") +
         dirpath);
     return;
+  }
 
-    std::string result = "\n" + cout_recursive_(data, dirpath, depth);
-    if (result.empty()) {
-      write_status_client("пусто");
-    } else {
-      write_status_client(result);
-    }
+  std::string result = "\n" + cout_recursive_(data, dirpath, depth);
+  if (result.empty()) {
+    write_status_client("пусто");
+  } else {
+    write_status_client(result);
   }
 }
 
