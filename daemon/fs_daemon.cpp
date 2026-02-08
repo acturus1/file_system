@@ -399,8 +399,8 @@ void list_files(const char *filepath, FATData &data) {
 }
 
 std::string cout_recursive_(FATData &data, std::string dirpath, int depth) {
-  std::cout << "OwO:" << dirpath << std::endl;
   std::string result;
+
   std::string indent;
   for (int i = 0; i < depth; i++) {
     if (i == depth - 1) {
@@ -410,12 +410,7 @@ std::string cout_recursive_(FATData &data, std::string dirpath, int depth) {
     }
   }
 
-  if (dirpath != "/" && !dirpath.empty() && dirpath.back() == '/') {
-    dirpath.pop_back();
-  }
-
   utils::Response answer = utils::list_files(dirpath.c_str(), data);
-  std::cout << answer.result << std::endl;
   std::string text = answer.result;
   std::string segment;
   std::stringstream ss(text);
@@ -426,15 +421,22 @@ std::string cout_recursive_(FATData &data, std::string dirpath, int depth) {
   }
 
   for (const std::string &s : seglist) {
-    if (s[s.length() - 1] == '/') {
-      result += indent + "|-" + s + " D\n";
-      if (dirpath == "/") {
-        result += cout_recursive_(data, dirpath + s, depth + 1);
+    if (!s.empty()) {
+      if (s[s.length() - 1] == '/') {
+        std::string name_without_slash = s.substr(0, s.length() - 1);
+        result += indent + s + " D\n";
+
+        std::string new_path;
+        if (dirpath == "/") {
+          new_path = dirpath + name_without_slash;
+        } else {
+          new_path = dirpath + "/" + name_without_slash;
+        }
+
+        result += cout_recursive_(data, new_path, depth + 1);
       } else {
-        result += cout_recursive_(data, dirpath + "/" + s, depth + 1);
+        result += indent + s + " F\n";
       }
-    } else {
-      result += indent + "|-" + s + " F\n";
     }
   }
 
