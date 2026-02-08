@@ -401,10 +401,17 @@ void list_files(const char *filepath, FATData &data) {
 std::string cout_recursive_(FATData &data, std::string dirpath, int depth) {
   std::cout << "OwO:" << dirpath << std::endl;
   std::string result;
-  std::string indent(depth * 2, ' ');
+  std::string indent;
+  for (int i = 0; i < depth; i++) {
+    if (i == depth - 1) {
+      indent += "|-";
+    } else {
+      indent += "| ";
+    }
+  }
 
-  if (dirpath != "/" && dirpath[dirpath.length() - 1] == '/') {
-    dirpath = dirpath.substr(0, dirpath.length() - 1);
+  if (dirpath != "/" && !dirpath.empty() && dirpath.back() == '/') {
+    dirpath.pop_back();
   }
 
   utils::Response answer = utils::list_files(dirpath.c_str(), data);
@@ -420,14 +427,14 @@ std::string cout_recursive_(FATData &data, std::string dirpath, int depth) {
 
   for (const std::string &s : seglist) {
     if (s[s.length() - 1] == '/') {
-      result += indent + s + " D\n";
+      result += indent + "|-" + s + " D\n";
       if (dirpath == "/") {
         result += cout_recursive_(data, dirpath + s, depth + 1);
       } else {
         result += cout_recursive_(data, dirpath + "/" + s, depth + 1);
       }
     } else {
-      result += indent + s + " F\n";
+      result += indent + "|-" + s + " F\n";
     }
   }
 
