@@ -28,6 +28,13 @@ cleanup() {
 
 trap cleanup SIGINT SIGTERM EXIT
 
+
+
+if ((CLEAN)); then 
+    rm FAT memory ; dd if=/dev/zero bs=1 of=memory count=1024 ; touch FAT
+    rm myfifo server_fifo
+fi
+
 i3-msg split v
 alacritty -e watch bat -A memory &
 sleep 0.3

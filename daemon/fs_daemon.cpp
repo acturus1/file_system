@@ -321,6 +321,9 @@ std::string recursive_find_all_files_to_delete(std::string dirpath,
 // delete /d1
 int delete_file(const char *filename, FATData &data) {
   std::string filename_str = filename;
+  if (filename_str == "/") {
+    write_status_client("Нельзя удалить /");
+  }
   if (data.files.find(filename_str) == data.files.end()) {
     write_status_client("Файл/директория с именем " + filename_str +
                         " не существует");
@@ -468,6 +471,67 @@ void cout_recursive(FATData &data, std::string dirpath, int depth = 0) {
   } else {
     write_status_client(result);
   }
+}
+
+void move_file(FATData &data, std::string filepath_new,
+               std::string filepath_old) {
+  auto it = data.files.find(filepath_old);
+  std::cout << "DEBUG 1: filepath_new = '" << filepath_new << "'" << std::endl;
+  if (it == data.files.end()) {
+    write_status_client(std::string("Ошибка: нет такого файла ") +
+                        filepath_old);
+    return;
+  }
+  if (data.files[filepath_old].type == FileType::DIR) {
+    write_status_client("Ошибка: " + filepath_old + " является директорией");
+    return;
+  }
+
+  if (!all_filepath_unit_exist(data, filepath_old)) {
+    write_status_client(
+        std::string(
+            "Ошибка: не существует какого-то из звеньев в старом пути  ") +
+        filepath_old);
+    return;
+  }
+
+  if (!all_filepath_unit_exist(
+          data, filepath_new.substr(0, filepath_new.find_last_of('/')))) {
+    write_status_client(
+        std::string(
+            "Ошибка: не существует какого-то из звеньев в старом пути  ") +
+        filepath_old);
+    return;
+  }
+
+  if (filepath_new.substr(filepath_new.find_last_of('/'),
+                          filepath_new.size()) == "") {
+    write_status_client("Ошибка: имя конечного файла не должно быть пустым");
+    return;
+  }
+  if (!filepath_new.empty() &&
+      filepath_new.substr(filepath_new.size() - 1) == "/") {
+    write_status_client("Ошибка: нельзя переместить файл в директорию, укажите "
+                        "новое имя файла");
+    return;
+  }
+  if (data.files.find(filepath_new) != data.files.end()) {
+    write_status_client(
+        "Ошибка: нельзя переместить на место дериктории или другого файла");
+    return;
+  }
+
+  FileInfo file_info = std::move(it->second);
+  file_info.name = filepath_new;
+
+  delete_parent_dir_content(filepath_old, data);
+  data.files.erase(it);
+
+  data.files[filepath_new] = std::move(file_info);
+  update_parent_dir_content(filepath_new, data);
+  std::cout << "DEBUG 1: filepath_new = '" << filepath_new << "'" << std::endl;
+  write_status_client("Файл перемещён: " + filepath_old + " -> " +
+                      filepath_new);
 }
 
 void prepare_FAT(FATData &data) {
