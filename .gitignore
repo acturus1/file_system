@@ -6,3 +6,4 @@ FAT
 *.out
 output/
 desk.md
+daemon/LIST.cpp

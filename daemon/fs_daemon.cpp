@@ -465,7 +465,17 @@ void cout_recursive(FATData &data, std::string dirpath, int depth = 0) {
     return;
   }
 
-  std::string result = "\n" + cout_recursive_(data, dirpath, depth);
+  utils::TreeResponse response = utils::tree(data, dirpath);
+  std::string result;
+
+  for (auto [dir, content] : response.result) {
+    result += dir + ": ";
+    for (std::string child : content) {
+      result += child + ", ";
+    }
+    result += "\n";
+  }
+
   if (result.empty()) {
     write_status_client("пусто");
   } else {
@@ -476,7 +486,6 @@ void cout_recursive(FATData &data, std::string dirpath, int depth = 0) {
 void move_file(FATData &data, std::string filepath_new,
                std::string filepath_old) {
   auto it = data.files.find(filepath_old);
-  std::cout << "DEBUG 1: filepath_new = '" << filepath_new << "'" << std::endl;
   if (it == data.files.end()) {
     write_status_client(std::string("Ошибка: нет такого файла ") +
                         filepath_old);
@@ -529,7 +538,65 @@ void move_file(FATData &data, std::string filepath_new,
 
   data.files[filepath_new] = std::move(file_info);
   update_parent_dir_content(filepath_new, data);
-  std::cout << "DEBUG 1: filepath_new = '" << filepath_new << "'" << std::endl;
+  write_status_client("Файл перемещён: " + filepath_old + " -> " +
+                      filepath_new);
+}
+
+void move_directory(FATData &data, std::string filepath_new,
+                    std::string filepath_old) {
+  auto it = data.files.find(filepath_old);
+  if (it == data.files.end()) {
+    write_status_client(std::string("Ошибка: нет такого файла ") +
+                        filepath_old);
+    return;
+  }
+  if (data.files[filepath_old].type == FileType::FILE) {
+    write_status_client("Ошибка: " + filepath_old + " является файлом");
+    return;
+  }
+
+  if (!all_filepath_unit_exist(data, filepath_old)) {
+    write_status_client(
+        std::string(
+            "Ошибка: не существует какого-то из звеньев в старом пути  ") +
+        filepath_old);
+    return;
+  }
+
+  if (!all_filepath_unit_exist(
+          data, filepath_new.substr(0, filepath_new.find_last_of('/')))) {
+    write_status_client(
+        std::string(
+            "Ошибка: не существует какого-то из звеньев в старом пути  ") +
+        filepath_old);
+    return;
+  }
+
+  if (filepath_new.substr(filepath_new.find_last_of('/'),
+                          filepath_new.size()) == "") {
+    write_status_client("Ошибка: имя конечного файла не должно быть пустым");
+    return;
+  }
+  if (!filepath_new.empty() &&
+      filepath_new.substr(filepath_new.size() - 1) == "/") {
+    write_status_client("Ошибка: нельзя переместить файл в директорию, укажите "
+                        "новое имя файла");
+    return;
+  }
+  if (data.files.find(filepath_new) != data.files.end()) {
+    write_status_client(
+        "Ошибка: нельзя переместить на место дериктории или другого файла");
+    return;
+  }
+
+  FileInfo file_info = std::move(it->second);
+  file_info.name = filepath_new;
+
+  delete_parent_dir_content(filepath_old, data);
+  data.files.erase(it);
+
+  data.files[filepath_new] = std::move(file_info);
+  update_parent_dir_content(filepath_new, data);
   write_status_client("Файл перемещён: " + filepath_old + " -> " +
                       filepath_new);
 }
