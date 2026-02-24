@@ -5,19 +5,11 @@
 
 void search_tree_recursive(FATData &data, std::string dirpath,
                            utils::TreeResponse &result) {
-  utils::Response answer = utils::list_files(dirpath.c_str(), data);
-  std::string text = answer.result;
-  std::string segment;
-  std::stringstream ss(text);
-  std::vector<std::string> seglist;
+  utils::ListResponse answer = utils::list_files(dirpath.c_str(), data);
 
-  while (std::getline(ss, segment, ' ')) {
-    seglist.push_back(segment);
-  }
+  result.result[dirpath] = answer.result;
 
-  result.result[dirpath] = seglist;
-
-  for (const std::string &s : seglist) {
+  for (std::string s : answer.result) {
     if (!s.empty()) {
       if (s[s.length() - 1] == '/') {
         std::string name_without_slash = s.substr(0, s.length() - 1);

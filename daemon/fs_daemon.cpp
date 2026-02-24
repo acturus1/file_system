@@ -388,17 +388,20 @@ int edit_file(const char *filename, const char *text, FATData &data,
 }
 
 void list_files(const char *filepath, FATData &data) {
-  utils::Response answer = utils::list_files(filepath, data);
-  if (answer.status == OK && answer.result == "") {
+  utils::ListResponse answer = utils::list_files(filepath, data);
+  if (answer.status == OK && answer.result.empty()) {
     write_status_client("Пусто!");
   }
 
-  if (answer.status == LS_NO_EXISTING_DIR && answer.result == "") {
+  if (answer.status == LS_NO_EXISTING_DIR && answer.result.empty()) {
     std::string filename_str = filepath;
     write_status_client("Файл с именем " + filename_str + " не существует");
   }
 
-  write_status_client(answer.result);
+  std::string result = "";
+  for (std::string x : answer.result)
+    result += x;
+  write_status_client(result);
 }
 
 std::string cout_recursive_(FATData &data, std::string dirpath, int depth) {
@@ -413,17 +416,9 @@ std::string cout_recursive_(FATData &data, std::string dirpath, int depth) {
     }
   }
 
-  utils::Response answer = utils::list_files(dirpath.c_str(), data);
-  std::string text = answer.result;
-  std::string segment;
-  std::stringstream ss(text);
-  std::vector<std::string> seglist;
+  utils::ListResponse answer = utils::list_files(dirpath.c_str(), data);
 
-  while (std::getline(ss, segment, ' ')) {
-    seglist.push_back(segment);
-  }
-
-  for (const std::string &s : seglist) {
+  for (std::string s : answer.result) {
     if (!s.empty()) {
       if (s[s.length() - 1] == '/') {
         std::string name_without_slash = s.substr(0, s.length() - 1);
