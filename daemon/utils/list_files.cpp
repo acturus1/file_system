@@ -1,10 +1,12 @@
 #include "utils.hpp"
+#include <iostream>
 #include <sstream>
+#include <string>
+#include <vector>
 
-utils::Response utils::list_files(const char *filepath, FATData &data) {
-  utils::Response answer;
+utils::ListResponse utils::list_files(const char *filepath, FATData &data) {
+  utils::ListResponse answer;
   if (data.files.empty()) {
-    answer.result = "";
     answer.status = OK;
     return answer;
   }
@@ -13,13 +15,12 @@ utils::Response utils::list_files(const char *filepath, FATData &data) {
 
   if (response.status == READ_NO_EXISTING_FILE) {
     std::string filename_str = filepath;
-    answer.result = "";
     answer.status = LS_NO_EXISTING_DIR;
     return answer;
   }
 
-  std::string file_list;
-  std::string dir_list;
+  std::vector<std::string> file_list;
+  std::vector<std::string> dir_list;
 
   std::stringstream ss(response.result);
   std::string file_system_object; // file, directory, etc.
@@ -47,17 +48,19 @@ utils::Response utils::list_files(const char *filepath, FATData &data) {
     FileType obj_type = it->second.type;
 
     if (obj_type == FileType::FILE) {
-      file_list += file_system_object + " ";
+      file_list.push_back(file_system_object);
     } else {
-      dir_list += file_system_object + "/ ";
+      dir_list.push_back(file_system_object + "/");
     }
   }
 
-  std::string result;
-  result += dir_list;
-  result += file_list;
+  std::vector<std::string> result;
+  result.insert(result.end(), file_list.begin(), file_list.end());
+  result.insert(result.end(), dir_list.begin(), dir_list.end());
 
   answer.result = result;
   answer.status = OK;
+  for (std::string x : answer.result)
+    std::cout << x << std::endl;
   return answer;
 }

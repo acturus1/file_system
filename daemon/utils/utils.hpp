@@ -22,6 +22,11 @@ struct Response {
   std::string result;
 };
 
+struct ListResponse {
+  int status;
+  std::vector<std::string> result;
+};
+
 struct TreeResponse {
   int status;
   std::map<std::string, std::vector<std::string>> result;
@@ -32,7 +37,7 @@ std::string read_block(Block block);
 Response read_file(const char *filename, FATData &data,
                    bool do_dir_check = true);
 
-Response list_files(const char *filepath, FATData &data);
+ListResponse list_files(const char *filepath, FATData &data);
 
 TreeResponse tree(FATData &data, std::string dirpath);
 
