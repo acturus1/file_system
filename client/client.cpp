@@ -26,27 +26,6 @@ int main() {
     if (message == "exit") {
       break;
     }
-    // Зачем искать если можно сравнивать n символов
-    if (message.find("write ") == 0) { // BUG: edit /write slkdfjlsdkfj
-      message.replace(0, 5, "w");
-    } else if (message.find("edit ") == 0) {
-      message.replace(0, 4, "e");
-    } else if (message.find("read ") == 0) {
-      message.replace(0, 4, "r");
-    } else if (message.find("mkdir ") == 0) {
-      message.replace(0, 5, "m");
-    } else if (message.find("delete ") == 0) {
-      message.replace(0, 6, "x");
-    } else if (message.find("ls ") == 0) {
-      message.replace(0, 2, "l");
-    } else if (message.find("tree") == 0) {
-      message.replace(0, 4, "t");
-    } else if (message.find("move") == 0) {
-      message.replace(0, 4, "v");
-    } else {
-      std::cout << "Неизвестная команда: " << message << std::endl;
-      continue;
-    }
 
     message += '\n';
     ssize_t bytes_written = write(fd, message.c_str(), message.length());

@@ -1,4 +1,17 @@
 #include "./fs_daemon.cpp"
+#include <iostream>
+#include <string.h>
+#include <vector>
+
+bool is_beginning_matches(char *target, const char *pattern) {
+  for (int i = 0; i < strlen(pattern); i++) {
+    std::cout << target[i] << "-" << pattern[i] << std::endl;
+    if (target[i] != pattern[i]) {
+      return false;
+    }
+  }
+  return true;
+}
 
 int main() {
   FATData data = read_FAT_from_disk();
@@ -14,57 +27,46 @@ int main() {
   }
   char buffer[1024];
   while (true) {
-    ssize_t bytes_read = read(fd, buffer, sizeof(buffer) - 1);
+    int bytes_read = read(fd, buffer, sizeof(buffer) - 1);
     if (bytes_read == -1) {
       perror("Ошибка чтения");
       break;
-    } else if (bytes_read == 0) {
+    }
+    if (bytes_read == 0) {
       std::cout << "Клиент отключился" << std::endl;
       break;
     } else {
       buffer[bytes_read] = '\0';
-      // Сделать чтобы переводило строку в список
-      std::cout << "Получено от клиента: " << buffer;
       std::istringstream iss(buffer + 1);
-      std::string absolute_file_path;
-      iss >> absolute_file_path;
-
-      if (buffer[0] == 'l') {
-        if (!absolute_file_path.empty() && !is_valid_name(absolute_file_path)) {
-          write_status_client("Ошибка: имя '" + absolute_file_path +
-                              "' не является абсолютным путём");
-        }
-      } else if (!is_valid_name(absolute_file_path)) {
-        write_status_client("Ошибка: имя '" + absolute_file_path +
-                            "' не является абсолютным путём");
-        continue;
+      std::vector<std::string> user_input;
+      std::string word;
+      while (iss >> word) {
+        user_input.push_back(word);
       }
 
-      if (buffer[0] == 'w') {
-        std::string text;
-        iss >> text;
-        write_file(absolute_file_path.c_str(), text.c_str(), data);
-      } else if (buffer[0] == 'm') {
-        create_directory(absolute_file_path.c_str(), data);
-      } else if (buffer[0] == 'x') {
-        if (delete_file(absolute_file_path.c_str(), data) == 0) {
-          write_status_client("OK");
-        }
-      } else if (buffer[0] == 'e') {
-        std::string text;
-        iss >> text;
-        if (edit_file(absolute_file_path.c_str(), text.c_str(), data) == 0) {
-        }
-      } else if (buffer[0] == 'r') {
-        read_file(absolute_file_path.c_str(), data);
-      } else if (buffer[0] == 'l') {
-        list_files(absolute_file_path.c_str(), data);
-      } else if (buffer[0] == 't') {
-        cout_recursive(data, absolute_file_path, 0);
-      } else if (buffer[0] == 'v') {
-        std::string filepath_new;
-        iss >> filepath_new;
-        move_file(data, filepath_new.c_str(), absolute_file_path.c_str());
+      if (is_beginning_matches(buffer, "write")) {
+        write_file(user_input[1].c_str(), user_input[2].c_str(), data);
+      }
+      if (is_beginning_matches(buffer, "mkdir")) {
+        create_directory(user_input[1].c_str(), data);
+      }
+      if (is_beginning_matches(buffer, "delete")) {
+        delete_file(user_input[1].c_str(), data);
+      }
+      if (is_beginning_matches(buffer, "edit")) {
+        edit_file(user_input[2].c_str(), user_input[2].c_str(), data);
+      }
+      if (is_beginning_matches(buffer, "read")) {
+        read_file(user_input[1].c_str(), data);
+      }
+      if (is_beginning_matches(buffer, "ls")) {
+        list_files(user_input[1].c_str(), data);
+      }
+      if (is_beginning_matches(buffer, "tree")) {
+        cout_recursive(data, user_input[1].c_str(), 0);
+      }
+      if (is_beginning_matches(buffer, "move")) {
+        move_file(data, user_input[1].c_str(), user_input[2].c_str());
       }
       if (buffer[bytes_read - 1] != '\n') {
         std::cout << std::endl;

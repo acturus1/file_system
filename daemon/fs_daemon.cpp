@@ -357,6 +357,7 @@ int delete_file(const char *filename, FATData &data) {
     data.files.erase(file_to_delete_name);
   }
 
+  write_status_client("OK");
   return 0;
 }
 
