@@ -18,7 +18,7 @@ int main() {
       << "Клиент подключился к серверу. Введите сообщения (Ctrl+D для выхода):"
       << std::endl;
   std::cout << "Команды: write, edit, read, "
-               "mkdir, delete, ls, exit"
+               "mkdir, delete, ls, exit, tree, move"
             << std::endl;
 
   std::string message;
@@ -26,7 +26,7 @@ int main() {
     if (message == "exit") {
       break;
     }
-
+    // Зачем искать если можно сравнивать n символов
     if (message.find("write ") == 0) { // BUG: edit /write slkdfjlsdkfj
       message.replace(0, 5, "w");
     } else if (message.find("edit ") == 0) {
@@ -39,6 +39,10 @@ int main() {
       message.replace(0, 6, "x");
     } else if (message.find("ls ") == 0) {
       message.replace(0, 2, "l");
+    } else if (message.find("tree") == 0) {
+      message.replace(0, 4, "t");
+    } else if (message.find("move") == 0) {
+      message.replace(0, 4, "v");
     } else {
       std::cout << "Неизвестная команда: " << message << std::endl;
       continue;

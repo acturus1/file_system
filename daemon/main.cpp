@@ -23,6 +23,7 @@ int main() {
       break;
     } else {
       buffer[bytes_read] = '\0';
+      // Сделать чтобы переводило строку в список
       std::cout << "Получено от клиента: " << buffer;
       std::istringstream iss(buffer + 1);
       std::string absolute_file_path;
@@ -58,6 +59,12 @@ int main() {
         read_file(absolute_file_path.c_str(), data);
       } else if (buffer[0] == 'l') {
         list_files(absolute_file_path.c_str(), data);
+      } else if (buffer[0] == 't') {
+        cout_recursive(data, absolute_file_path, 0);
+      } else if (buffer[0] == 'v') {
+        std::string filepath_new;
+        iss >> filepath_new;
+        move_file(data, filepath_new.c_str(), absolute_file_path.c_str());
       }
       if (buffer[bytes_read - 1] != '\n') {
         std::cout << std::endl;

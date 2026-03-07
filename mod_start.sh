@@ -8,9 +8,9 @@ CLEAN=0
 
 cd daemon
 if (( DEBUG )); then
-  g++ main.cpp constants.cpp utils/read.cpp -o ../server.out -g
+  g++ main.cpp constants.cpp utils/*.cpp -o ../server.out -g
 else
-  g++ main.cpp constants.cpp utils/read.cpp -o ../server.out
+  g++ main.cpp constants.cpp utils/*.cpp -o ../server.out
 fi
 cd ..
 
@@ -27,6 +27,13 @@ cleanup() {
 }
 
 trap cleanup SIGINT SIGTERM EXIT
+
+
+
+if ((CLEAN)); then 
+    rm FAT memory ; dd if=/dev/zero bs=1 of=memory count=1024 ; touch FAT
+    rm myfifo server_fifo
+fi
 
 i3-msg split v
 alacritty -e watch bat -A memory &

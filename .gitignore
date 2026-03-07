@@ -4,3 +4,6 @@ example_test
 memory
 FAT
 *.out
+output/
+desk.md
+daemon/LIST.cpp
