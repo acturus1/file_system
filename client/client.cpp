@@ -26,7 +26,7 @@ int main() {
     if (message == "exit") {
       break;
     }
-
+    // Зачем искать если можно сравнивать n символов
     if (message.find("write ") == 0) { // BUG: edit /write slkdfjlsdkfj
       message.replace(0, 5, "w");
     } else if (message.find("edit ") == 0) {
