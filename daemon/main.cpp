@@ -23,6 +23,7 @@ int main() {
       break;
     } else {
       buffer[bytes_read] = '\0';
+      // Сделать чтобы переводило строку в список
       std::cout << "Получено от клиента: " << buffer;
       std::istringstream iss(buffer + 1);
       std::string absolute_file_path;

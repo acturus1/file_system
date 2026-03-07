@@ -4,8 +4,8 @@
 #include <fstream>
 #include <gtest/gtest.h>
 #include <iostream>
-#include <ostream>
 #include <string>
+#include <vector>
 
 void write_file(const char *filepath, const char *text, FATData &data);
 void prepare_FAT(FATData &data);
@@ -16,7 +16,7 @@ int edit_file(const char *filename, const char *text, FATData &data,
               bool do_user_checks = true);
 void create_directory(const char *dirpath, FATData &data);
 
-utils::Response utils::list_files(const char *filepath, FATData &data);
+utils::ListResponse utils::list_files(const char *filepath, FATData &data);
 
 const char *file_path = "/f1";
 const char *file_content = "f1content";
@@ -103,20 +103,19 @@ TEST_F(FileSystemTest, EditFileTestMemory) {
 
 TEST_F(FileSystemTest, ListRootDirectory) {
   write_file(file_path, file_content, data);
-  utils::Response response = utils::list_files("/", data);
+  utils::ListResponse response = utils::list_files("/", data);
 
   ASSERT_EQ(response.status, OK);
-  std::string result = response.result;
-  if (!result.empty() && result.back() == ' ') {
-    result.pop_back();
-  };
+  std::vector<std::string> result = response.result;
   std::string list_file = file_path;
   list_file.erase(0, 1);
-  EXPECT_EQ(result, list_file);
+  EXPECT_EQ(result.size(), 1);
+  EXPECT_EQ(result[0], list_file);
 };
 
 TEST_F(FileSystemTest, ListNotExistingDirectory) {
-  utils::Response response = utils::list_files("/not_existing_directory", data);
+  utils::ListResponse response =
+      utils::list_files("/not_existing_directory", data);
   ASSERT_EQ(response.status, LS_NO_EXISTING_DIR);
 }
 
@@ -145,12 +144,13 @@ TEST_F(FileSystemTest, LsTest1) {
                    data);
   create_directory((std::string(dirpath1) + std::string(dirpath3)).c_str(),
                    data);
-  utils::Response response = utils::list_files(dirpath1, data);
+  utils::ListResponse response = utils::list_files(dirpath1, data);
   std::string reformed_d2 =
-      std::string(dirpath2).substr(1, std::string(dirpath2).size() - 1) + "/ ";
+      std::string(dirpath2).substr(1, std::string(dirpath2).size() - 1) + "/";
   std::string reformed_d3 =
-      std::string(dirpath3).substr(1, std::string(dirpath3).size() - 1) + "/ ";
-  EXPECT_EQ(response.result, reformed_d2 + reformed_d3);
+      std::string(dirpath3).substr(1, std::string(dirpath3).size() - 1) + "/";
+  EXPECT_EQ(response.result[0], reformed_d2);
+  EXPECT_EQ(response.result[1], reformed_d3);
 }
 
 TEST_F(FileSystemTest, LsTest2) {
@@ -160,11 +160,11 @@ TEST_F(FileSystemTest, LsTest2) {
   create_directory((std::string(dirpath1) + std::string(dirpath3)).c_str(),
                    data);
   std::string reformed_d3 =
-      std::string(dirpath3).substr(1, std::string(dirpath3).size() - 1) + "/ ";
+      std::string(dirpath3).substr(1, std::string(dirpath3).size() - 1) + "/";
 
   delete_file((std::string(dirpath1) + std::string(dirpath2)).c_str(), data);
-  utils::Response response = utils::list_files(dirpath1, data);
-  EXPECT_EQ(response.result, reformed_d3);
+  utils::ListResponse response = utils::list_files(dirpath1, data);
+  EXPECT_EQ(response.result[0], reformed_d3);
 }
 
 TEST_F(FileSystemTest, LsTest3) {
@@ -173,15 +173,15 @@ TEST_F(FileSystemTest, LsTest3) {
              file_content, data);
   write_file((std::string(dirpath1) + std::string(file_path2)).c_str(),
              file_content, data);
-  utils::Response response = utils::list_files(dirpath1, data);
+  utils::ListResponse response = utils::list_files(dirpath1, data);
 
   std::string reformed_f1 =
-      std::string(file_path).substr(1, std::string(file_path).size() - 1) + " ";
+      std::string(file_path).substr(1, std::string(file_path).size() - 1);
   std::string reformed_f2 =
-      std::string(file_path2).substr(1, std::string(file_path2).size() - 1) +
-      " ";
+      std::string(file_path2).substr(1, std::string(file_path2).size() - 1);
 
-  EXPECT_EQ(response.result, reformed_f1 + reformed_f2);
+  EXPECT_EQ(response.result[0], reformed_f1);
+  EXPECT_EQ(response.result[1], reformed_f2);
 }
 
 TEST_F(FileSystemTest, FileEndCorrectSimbol) {
