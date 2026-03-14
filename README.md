@@ -1,3 +1,5 @@
+# ФайлоОтличный README! Всё структурировано и понятно. Вот финальная версия с вашей схемой:
+
 # Файловая система на основе FIFO с эмуляцией FAT
 
 ## 📋 Содержание
@@ -111,16 +113,18 @@ struct FATData {
 
 **move** — перемещает файл из одного места в другое. Проверяет существование исходного файла, существование целевой директории и что целевое имя не занято. Обновляет записи в старой и новой родительских директориях и меняет путь в информации о файле.
 
+### Взаимодействие клиент-сервер
+
 Клиент и сервер общаются через два именованных канала (FIFO):
-1. ./myfifo - клиент пишет команды, сервер читает
-2. ./server_fifo - сервер пишет ответы, клиент читает
+1. **./myfifo** - клиент пишет команды, сервер читает
+2. **./server_fifo** - сервер пишет ответы, клиент читает
 
 При каждой команде клиент:
 - Открывает ./myfifo на запись, отправляет команду
 - Открывает ./server_fifo на чтение, ждёт ответ
 - Закрывает оба канала
 
-Сервер постоянно слушает ./myfifo и обрабатывает команды по очереди
+Сервер постоянно слушает ./myfifo и обрабатывает команды по очереди.
 
 ## Управление памятью
 
@@ -167,31 +171,26 @@ void delete_block(Block &block, FATData &data) {
 - C++17 или новее
 - GCC/Clang
 - Google Test (для тестов)
-- CMake (опционально)
-
-### Компиляция
-
-```bash
-# Сервер
-g++ -std=c++17 -I. daemon/main.cpp -o server.out 
-
-# Клиент  
-g++ -std=c++17 client/client.cpp -o client.out
-
-# Тесты
-g++ -std=c++17 -I. tests/daemon/tests.cpp tests/daemon/constants.cpp -lgtest -lgtest_main -pthread -o test.out
-```
 
 ### Запуск
 
 ```bash
-# Терминал 1: сервер
-./filesystem_server
+# Обычный запуск
+./mod_start.sh
 
-# Терминал 2: клиент
-./filesystem_client
+# Запуск с очисткой (пересоздание FAT и memory)
+./mod_start.sh c
 
-# Пример сессии
+# Запуск в режиме отладки (с GDB)
+./mod_start.sh d
+
+# Запуск с очисткой и отладкой
+./mod_start.sh cd
+```
+
+### Пример запуска 
+
+```bash
 > write /test.txt "Hello, World!"
 Команда отправлена. Ожидание ответа...
 Ответ сервера: OK
@@ -200,6 +199,9 @@ g++ -std=c++17 -I. tests/daemon/tests.cpp tests/daemon/constants.cpp -lgtest -lg
 Команда отправлена. Ожидание ответа...
 Ответ сервера: Hello, World!
 
+> ls /
+test.txt
+
 > exit
 ```
 
@@ -207,8 +209,11 @@ g++ -std=c++17 -I. tests/daemon/tests.cpp tests/daemon/constants.cpp -lgtest -lg
 
 ### Запуск тестов
 
+Тесты лежат в папке tests/daemon/
+
 ```bash
-./filesystem_test
+# В папке tests/daemon
+./test.sh 
 ```
 
 ### Набор тестов
@@ -249,26 +254,29 @@ g++ -std=c++17 -I. tests/daemon/tests.cpp tests/daemon/constants.cpp -lgtest -lg
 
 ```
 .
-├── client/
-│   └── client.cpp              # Клиентская часть
-├── daemon/
-│   ├── main.cpp                 # Серверная часть
-│   ├── fs_daemon.cpp            # Основная логика ФС
-│   ├── fat_funcs.cpp             # Работа с FAT
-│   ├── constants.cpp             # Константы
-│   ├── constants.hpp
-│   ├── model/
-│   │   ├── block.hpp
-│   │   ├── file_info.hpp
-│   │   └── fat_data.hpp
-│   └── utils/
-│       ├── utils.hpp
-│       ├── read.cpp              # Чтение файлов
-│       ├── list_files.cpp        # Листинг
-│       └── tree.cpp              # Дерево директорий
-├── tests/
-│   └── daemon/
-│       ├── tests.cpp             # Модульные тесты
-│       └── constants.cpp         # Константы для тестов
-└── README.md
+├── client
+│   └── client.cpp              # Клиентская часть
+├── daemon
+│   ├── constants.cpp            # Константы
+│   ├── constants.hpp
+│   ├── fat_funcs.cpp             # Работа с FAT
+│   ├── fs_daemon.cpp            # Основная логика ФС
+│   ├── main.cpp                  # Серверная часть
+│   ├── model
+│   │   ├── block.hpp
+│   │   ├── fat_data.hpp
+│   │   └── file_info.hpp
+│   └── utils
+│       ├── list_files.cpp        # Листинг
+│       ├── read.cpp              # Чтение файлов
+│       ├── tree.cpp              # Дерево директорий
+│       └── utils.hpp
+├── mod_start.sh                  # Скрипт для запуска 
+├── README.md
+├── sceme.svg                      # Схема архитектуры
+└── tests
+    └── daemon
+        ├── constants.cpp         # Константы для тестов
+        ├── tests.cpp             # Модульные тесты
+        └── test.sh
 ```
