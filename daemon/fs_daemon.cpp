@@ -65,15 +65,12 @@ void write_block(std::string block, long long pos_start) {
 }
 
 bool file_already_exists(const std::string &filename, FATData &data,
-                         FileType requested_type) {
+                         FileType requested_type,
+                         bool strict_type_check = true) {
   auto it = data.files.find(filename);
   if (it != data.files.end()) {
-    FileType existing_type = it->second.type;
-    if (existing_type != requested_type) {
-      std::string existing_type_str =
-          (existing_type == FileType::FILE) ? "файл" : "директория";
-      std::string requested_type_str =
-          (requested_type == FileType::FILE) ? "файл" : "директория";
+    if (strict_type_check && it->second.type != requested_type) {
+      return false;
     }
     return true;
   }
@@ -157,6 +154,18 @@ std::string get_basename(std::string &filepath) {
 void update_parent_dir_content(std::string filepath, FATData &data) {
   std::string parent_dir = get_parent_dir_path(filepath);
   std::string file_basename = get_basename(filepath);
+
+  auto it = data.files.find(parent_dir);
+  if (it == data.files.end()) {
+    write_status_client(
+        "Внутренняя ошибка: родительская директория не существует");
+    return;
+  }
+
+  if (it->second.type != FileType::DIR) {
+    write_status_client("Ошибка: '" + parent_dir + "' не является директорией");
+    return;
+  }
 
   std::string parent_dir_content;
   if (data.files.find(parent_dir) == data.files.end()) {
