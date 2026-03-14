@@ -34,7 +34,8 @@ int main() {
       break;
     }
 
-    std::cout << "Команда отправлена. Ожидание ответа..." << std::endl;
+    std::cout << "Команда отправлена. Ожидание ответа..." << message
+              << std::endl;
     int read_fd = open(fifo_path_read, O_RDONLY);
     if (read_fd == -1) {
       puts("Ошибка открытия FIFO на чтение");
