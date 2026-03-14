@@ -37,36 +37,32 @@ int main() {
       break;
     } else {
       buffer[bytes_read] = '\0';
-      std::istringstream iss(buffer + 1);
+      std::istringstream iss(buffer);
       std::vector<std::string> user_input;
       std::string word;
       while (iss >> word) {
         user_input.push_back(word);
       }
 
-      if (is_beginning_matches(buffer, "write")) {
+      std::cout << user_input[0] << std::endl;
+      if (user_input[0] == "write") {
         write_file(user_input[1].c_str(), user_input[2].c_str(), data);
-      }
-      if (is_beginning_matches(buffer, "mkdir")) {
+      } else if (user_input[0] == "mkdir") {
         create_directory(user_input[1].c_str(), data);
-      }
-      if (is_beginning_matches(buffer, "delete")) {
+      } else if (user_input[0] == "delete") {
         delete_file(user_input[1].c_str(), data);
-      }
-      if (is_beginning_matches(buffer, "edit")) {
+      } else if (user_input[0] == "edit") {
         edit_file(user_input[2].c_str(), user_input[2].c_str(), data);
-      }
-      if (is_beginning_matches(buffer, "read")) {
+      } else if (user_input[0] == "read") {
         read_file(user_input[1].c_str(), data);
-      }
-      if (is_beginning_matches(buffer, "ls")) {
+      } else if (user_input[0] == "ls") {
         list_files(user_input[1].c_str(), data);
-      }
-      if (is_beginning_matches(buffer, "tree")) {
+      } else if (user_input[0] == "tree") {
         cout_recursive(data, user_input[1].c_str(), 0);
-      }
-      if (is_beginning_matches(buffer, "move")) {
+      } else if (user_input[0] == "move") {
         move_file(data, user_input[1].c_str(), user_input[2].c_str());
+      } else {
+        write_status_client("Неизвестная команда!");
       }
       if (buffer[bytes_read - 1] != '\n') {
         std::cout << std::endl;
