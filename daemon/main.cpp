@@ -52,7 +52,7 @@ int main() {
       } else if (user_input[0] == "delete") {
         delete_file(user_input[1].c_str(), data);
       } else if (user_input[0] == "edit") {
-        edit_file(user_input[2].c_str(), user_input[2].c_str(), data);
+        edit_file(user_input[1].c_str(), user_input[2].c_str(), data);
       } else if (user_input[0] == "read") {
         read_file(user_input[1].c_str(), data);
       } else if (user_input[0] == "ls") {
