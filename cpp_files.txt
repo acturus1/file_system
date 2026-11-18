@@ -1,0 +1,1421 @@
+===== Файл: ./client/client.cpp =====
+#include <cstdio>
+#include <fcntl.h>
+#include <iostream>
+#include <string>
+#include <unistd.h>
+
+int main() {
+  const char *fifo_path = "./myfifo";
+  const char *fifo_path_read = "./server_fifo";
+
+  int fd = open(fifo_path, O_WRONLY);
+  if (fd == -1) {
+    puts("Ошибка открытия FIFO на запись");
+    return 1;
+  }
+
+  std::cout
+      << "Клиент подключился к серверу. Введите сообщения (Ctrl+D для выхода):"
+      << std::endl;
+  std::cout << "Команды: write, edit, read, "
+               "mkdir, delete, ls, exit, tree, move"
+            << std::endl;
+
+  std::string message;
+  while (std::getline(std::cin, message)) {
+    if (message == "exit") {
+      break;
+    }
+
+    message += '\n';
+    ssize_t bytes_written = write(fd, message.c_str(), message.length());
+    if (bytes_written == -1) {
+      puts("Ошибка записи");
+      break;
+    }
+
+    std::cout << "Команда отправлена. Ожидание ответа..." << message
+              << std::endl;
+    int read_fd = open(fifo_path_read, O_RDONLY);
+    if (read_fd == -1) {
+      puts("Ошибка открытия FIFO на чтение");
+      close(fd);
+      return 1;
+    }
+
+    char reply[1024];
+    ssize_t bytes_read = read(read_fd, reply, sizeof(reply) - 1);
+    if (bytes_read > 0) {
+      reply[bytes_read] = '\0';
+      std::cout << "Ответ сервера: " << reply;
+    } else if (bytes_read == -1) {
+      puts("Ошибка чтения ответа");
+    }
+
+    close(read_fd);
+  }
+
+  close(fd);
+  std::cout << "Клиент завершает работу" << std::endl;
+  return 0;
+}
+===== Файл: ./daemon/fat_funcs.cpp =====
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+
+#include "constants.hpp"
+
+#include "model/fat_data.hpp"
+
+void get_file_name(std::string &line, size_t &pos, FileInfo &file) {
+  file.name = line.substr(0, pos);
+  pos++;
+}
+
+void get_file_type(std::string &line, size_t &pos, FileInfo &file) {
+  char type_char = line.substr(pos, pos + 1)[0];
+  switch (type_char) {
+  case 'f':
+    file.type = FileType::FILE;
+    break;
+  case 'd':
+    file.type = FileType::DIR;
+    break;
+  default:
+    puts(file.name.c_str());
+    puts("Unknown file type while reading FAT");
+    break;
+  }
+  pos += 2;
+}
+
+void print_block(std::ofstream &FAT, Block &block) {
+  FAT << "[" << block.start << "-" << block.end << "]";
+}
+
+void print_file_info(std::ofstream &FAT, FileInfo &file_info) {
+  char type = file_info.type == FileType::FILE ? 'f' : 'd';
+  FAT << file_info.name << ";" << type << ";";
+  for (Block block : file_info.data) {
+    print_block(FAT, block);
+  }
+  FAT << "\n";
+}
+
+void read_FAT_free_memory_info_from_disk(FATData &result, std::ifstream &FAT) {
+  std::string line;
+  if (std::getline(FAT, line)) {
+    std::istringstream iss(line);
+    char delim;
+
+    if (!(iss >> result.start_free_memory)) {
+      throw std::runtime_error("Invalid format: expected total blocks count");
+    }
+
+    iss >> delim;
+    if (delim != ',') {
+      throw std::runtime_error(
+          "Invalid format: expected comma after total blocks");
+    }
+
+    std::string range;
+    while (std::getline(iss, range, ',')) {
+      range.erase(0, range.find_first_not_of(" \t"));
+      if (range.empty())
+        continue;
+
+      if (range.front() == '[' && range.back() == ']') {
+        range = range.substr(1, range.size() - 2);
+        size_t dash_pos = range.find('-');
+        if (dash_pos != std::string::npos) {
+          Block block;
+          block.start = std::stoll(range.substr(0, dash_pos));
+          block.end = std::stoll(range.substr(dash_pos + 1));
+          result.empty_blocks.push_back(block);
+        }
+      }
+    }
+  }
+}
+
+void read_FAT_files_info_from_disk(FATData &result, std::ifstream &FAT) {
+  std::string line;
+  while (std::getline(FAT, line)) {
+    size_t pos = line.find(';');
+    if (pos == std::string::npos)
+      continue;
+
+    FileInfo file;
+    get_file_name(line, pos, file);
+    get_file_type(line, pos, file);
+
+    while (true) {
+      size_t close_br = line.find(']', pos);
+      if (close_br == std::string::npos)
+        break;
+
+      std::string range = line.substr(pos + 1, close_br - pos - 1);
+      size_t dash_pos = range.find('-');
+      if (dash_pos != std::string::npos) {
+        Block block;
+        block.start = std::stoll(range.substr(0, dash_pos));
+        block.end = std::stoll(range.substr(dash_pos + 1));
+        file.data.push_back(block);
+      }
+      pos = close_br + 1;
+      if (pos < line.size() && line[pos] == ',')
+        pos++;
+    }
+
+    result.files[file.name] = file;
+  }
+}
+
+FATData read_FAT_from_disk() {
+  FATData result;
+  std::ifstream FAT(FAT_PATH);
+  if (!FAT) {
+    throw std::runtime_error("Failed to open FAT file");
+  }
+
+  read_FAT_free_memory_info_from_disk(result, FAT);
+  read_FAT_files_info_from_disk(result, FAT);
+
+  return result;
+}
+
+void dump_FAT_to_disk(FATData &data) {
+  std::ofstream FAT(FAT_PATH);
+  if (!FAT) {
+    throw std::runtime_error("Failed to open FAT file");
+  }
+
+  FAT << data.start_free_memory << ",";
+  for (Block empty_block : data.empty_blocks) {
+    print_block(FAT, empty_block);
+  }
+
+  FAT << "\n";
+
+  for (auto &[filename, file_info] : data.files) {
+    print_file_info(FAT, file_info);
+  }
+}
+
+void debug_print_FAT(FATData &data) {
+  std::cout << data.start_free_memory << ",";
+  for (Block empty_block : data.empty_blocks) {
+    std::cout << "[" << empty_block.start << "-" << empty_block.end << "]";
+  }
+
+  std::cout << "\n";
+
+  for (auto &[filename, file_info] : data.files) {
+    char type = file_info.type == FileType::FILE ? 'f' : 'd';
+    std::cout << file_info.name << ";" << type << ";";
+    for (Block block : file_info.data) {
+      std::cout << "[" << block.start << "-" << block.end << "]";
+    }
+    std::cout << "\n";
+  }
+}
+===== Файл: ./daemon/utils/tree.cpp =====
+#include "utils.hpp"
+#include <iostream>
+#include <sstream>
+#include <string>
+
+void search_tree_recursive(FATData &data, std::string dirpath,
+                           utils::TreeResponse &result) {
+  utils::ListResponse answer = utils::list_files(dirpath.c_str(), data);
+
+  result.result[dirpath] = answer.result;
+
+  for (std::string s : answer.result) {
+    if (!s.empty()) {
+      if (s[s.length() - 1] == '/') {
+        std::string name_without_slash = s.substr(0, s.length() - 1);
+        std::string new_path;
+        if (dirpath == "/") {
+          new_path = dirpath + name_without_slash;
+        } else {
+          new_path = dirpath + "/" + name_without_slash;
+        }
+        search_tree_recursive(data, new_path, result);
+      }
+    }
+  }
+}
+
+utils::TreeResponse utils::tree(FATData &data, std::string dirpath) {
+  utils::TreeResponse result;
+  search_tree_recursive(data, dirpath, result);
+  result.status = OK;
+  std::cout << result.status << std::endl;
+  for (auto [dir, content] : result.result) {
+    std::cout << "Object " << dir << ": \n";
+    for (std::string child : content) {
+      std::cout << child << ", ";
+    }
+    std::cout << std::endl;
+  }
+  return result;
+}
+===== Файл: ./daemon/utils/list_files.cpp =====
+#include "utils.hpp"
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
+
+utils::ListResponse utils::list_files(const char *filepath, FATData &data) {
+  utils::ListResponse answer;
+  if (data.files.empty()) {
+    answer.status = OK;
+    return answer;
+  }
+
+  utils::Response response = utils::read_file(filepath, data, false);
+
+  if (response.status == READ_NO_EXISTING_FILE) {
+    std::string filename_str = filepath;
+    answer.status = LS_NO_EXISTING_DIR;
+    return answer;
+  }
+
+  std::vector<std::string> file_list;
+  std::vector<std::string> dir_list;
+
+  std::stringstream ss(response.result);
+  std::string file_system_object; // file, directory, etc.
+
+  std::string dir_path = filepath;
+  if (dir_path.back() != '/') {
+    dir_path += '/';
+  }
+
+  while (std::getline(ss, file_system_object, '/')) {
+    if (file_system_object.empty()) {
+      continue;
+    }
+
+    std::string full_path = dir_path + file_system_object;
+
+    if (data.files.find(full_path) == data.files.end()) {
+      full_path = dir_path + file_system_object + "/";
+      if (data.files.find(full_path) == data.files.end()) {
+        continue;
+      }
+    }
+
+    auto it = data.files.find(full_path);
+    FileType obj_type = it->second.type;
+
+    if (obj_type == FileType::FILE) {
+      file_list.push_back(file_system_object);
+    } else {
+      dir_list.push_back(file_system_object + "/");
+    }
+  }
+
+  std::vector<std::string> result;
+  result.insert(result.end(), file_list.begin(), file_list.end());
+  result.insert(result.end(), dir_list.begin(), dir_list.end());
+
+  answer.result = result;
+  answer.status = OK;
+  for (std::string x : answer.result)
+    std::cout << x << std::endl;
+  return answer;
+}
+===== Файл: ./daemon/utils/utils.hpp =====
+#include "../model/fat_data.hpp"
+#include <map>
+#include <string>
+#include <vector>
+
+#include "../constants.hpp"
+
+const int OK = 0;
+
+// READ FILE
+const int READ_DIR_ERR = 1;
+const int READ_NO_EXISTING_FILE = 2;
+
+// LIST FILES
+const int LS_NO_EXISTING_DIR = 3;
+
+// TREE FILES
+
+namespace utils {
+struct Response {
+  int status;
+  std::string result;
+};
+
+struct ListResponse {
+  int status;
+  std::vector<std::string> result;
+};
+
+struct TreeResponse {
+  int status;
+  std::map<std::string, std::vector<std::string>> result;
+};
+
+std::string read_block(Block block);
+
+Response read_file(const char *filename, FATData &data,
+                   bool do_dir_check = true);
+
+ListResponse list_files(const char *filepath, FATData &data);
+
+TreeResponse tree(FATData &data, std::string dirpath);
+
+} // namespace utils
+===== Файл: ./daemon/utils/read.cpp =====
+#include "utils.hpp"
+#include <fstream>
+
+std::string utils::read_block(Block block) {
+  std::ifstream file(MEMORY_PATH, std::ios::binary);
+  file.seekg(block.start);
+  char block_str[BLK_SIZE + 1] = {0};
+  file.read(block_str, BLK_SIZE);
+  file.close();
+  return block_str;
+}
+
+utils::Response utils::read_file(const char *filename, FATData &data,
+                                 bool do_dir_check) {
+  utils::Response response;
+  auto file = data.files.find(filename);
+
+  if (file == data.files.end()) { // нет такого файла
+    response.status = READ_NO_EXISTING_FILE;
+    return response;
+  }
+
+  if (do_dir_check && file->second.type != FileType::FILE) {
+    response.status = READ_DIR_ERR;
+    return response;
+  }
+
+  const FileInfo &fileInfo = file->second;
+  for (Block block : fileInfo.data) {
+    response.result += read_block(block);
+  }
+  response.status = OK;
+  return response;
+}
+===== Файл: ./daemon/constants.hpp =====
+#ifndef BLK_SIZE_CONSTANT
+#define BLK_SIZE_CONSTANT
+
+extern const int BLK_SIZE;
+
+#endif
+
+#ifndef FAT_PATH_CONSTANT
+#define FAT_PATH_CONSTANT
+
+extern const char *FAT_PATH;
+
+#endif
+
+#ifndef FIFO_PATH_CONSTANT
+#define FIFO_PATH_CONSTANT
+
+extern const char *fifo_path;
+
+#endif
+
+#ifndef FIFO_PATH_CLIENT_CONSTANT
+#define FIFO_PATH_CLIENT_CONSTANT
+
+extern const char *fifo_path_client;
+
+#endif
+
+#ifndef MEMORY_PATH_CONSTANT
+#define MEMORY_PATH_CONSTANT
+
+extern const char *MEMORY_PATH;
+
+#endif
+===== Файл: ./daemon/constants.cpp =====
+#include "constants.hpp"
+
+const int BLK_SIZE = 2;
+const char *FAT_PATH = "FAT";
+const char *fifo_path = "./myfifo";
+const char *fifo_path_client = "./server_fifo";
+const char *MEMORY_PATH = "./memory";
+===== Файл: ./daemon/main.cpp =====
+#include "./fs_daemon.cpp"
+#include <iostream>
+#include <string.h>
+#include <vector>
+
+bool is_beginning_matches(char *target, const char *pattern) {
+  for (int i = 0; i < strlen(pattern); i++) {
+    std::cout << target[i] << "-" << pattern[i] << std::endl;
+    if (target[i] != pattern[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+int main() {
+  FATData data = read_FAT_from_disk();
+  prepare_FAT(data);
+  debug_print_FAT(data);
+
+  create_fifos();
+
+  int fd = open(fifo_path, O_RDONLY);
+  if (fd == -1) {
+    perror("Ошибка открытия FIFO для записи серверу");
+    return 1;
+  }
+  char buffer[1024];
+  while (true) {
+    int bytes_read = read(fd, buffer, sizeof(buffer) - 1);
+    if (bytes_read == -1) {
+      perror("Ошибка чтения");
+      break;
+    }
+    if (bytes_read == 0) {
+      std::cout << "Клиент отключился" << std::endl;
+      break;
+    } else {
+      buffer[bytes_read] = '\0';
+      std::istringstream iss(buffer);
+      std::vector<std::string> user_input;
+      std::string word;
+      while (iss >> word) {
+        user_input.push_back(word);
+      }
+
+      std::cout << user_input[0] << std::endl;
+      if (user_input[0] == "write") {
+        write_file(user_input[1].c_str(), user_input[2].c_str(), data);
+      } else if (user_input[0] == "mkdir") {
+        create_directory(user_input[1].c_str(), data);
+      } else if (user_input[0] == "delete") {
+        delete_file(user_input[1].c_str(), data);
+      } else if (user_input[0] == "edit") {
+        edit_file(user_input[1].c_str(), user_input[2].c_str(), data);
+      } else if (user_input[0] == "read") {
+        read_file(user_input[1].c_str(), data);
+      } else if (user_input[0] == "ls") {
+        list_files(user_input[1].c_str(), data);
+      } else if (user_input[0] == "tree") {
+        cout_recursive(data, user_input[1].c_str(), 0);
+      } else if (user_input[0] == "move") {
+        move_file(data, user_input[1].c_str(), user_input[2].c_str());
+      } else {
+        write_status_client("Неизвестная команда!");
+      }
+      if (buffer[bytes_read - 1] != '\n') {
+        std::cout << std::endl;
+      }
+    }
+  }
+
+  close(fd);
+  unlink(fifo_path);
+  unlink(fifo_path_client);
+  std::cout << "Сервер завершает работу" << std::endl;
+
+  dump_FAT_to_disk(data);
+
+  return 0;
+}
+===== Файл: ./daemon/model/fat_data.hpp =====
+#include <map>
+#include <string>
+#include <vector>
+
+#include "block.hpp"
+#include "file_info.hpp"
+
+#ifndef FAT_DATA_MODEL
+#define FAT_DATA_MODEL
+
+struct FATData {
+  long long start_free_memory = 0;
+  std::vector<Block> empty_blocks;
+  std::map<std::string, FileInfo> files;
+};
+
+#endif
+===== Файл: ./daemon/model/block.hpp =====
+#ifndef BLOCK_MODEL_HPP
+
+#define BLOCK_MODEL_HPP
+
+class Block {
+public:
+  long long start;
+  long long end;
+};
+
+#endif
+===== Файл: ./daemon/model/file_info.hpp =====
+#include <string>
+#include <vector>
+
+#include "block.hpp"
+
+#ifndef FILE_TYPE_MODEL_HPP
+#define FILE_TYPE_MODEL_HPP
+
+enum class FileType { FILE, DIR };
+
+#endif
+
+#ifndef FILE_INFO_MODEL_HPP
+#define FILE_INFO_MODEL_HPP
+
+class FileInfo {
+public:
+  std::string name;
+  std::vector<Block> data;
+  FileType type = FileType::FILE;
+};
+
+#endif
+===== Файл: ./daemon/fs_daemon.cpp =====
+#include <cstdlib>
+#include <cstring>
+#include <fcntl.h>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "model/block.hpp"
+#include "model/fat_data.hpp"
+#include "model/file_info.hpp"
+
+#include "constants.hpp"
+#include "fat_funcs.cpp"
+
+#include "utils/utils.hpp"
+
+void create_fifos() {
+  mkfifo(fifo_path, 0666);
+  mkfifo(fifo_path_client, 0666);
+  std::cout << "FIFO созданы: " << fifo_path << " и " << fifo_path_client
+            << std::endl;
+}
+
+void write_status_client(const std::string &message) {
+  int fd = open(fifo_path_client, O_WRONLY);
+  if (fd == -1) {
+    perror("Ошибка открытия FIFO для записи клиенту");
+    return;
+  }
+
+  std::string msg = message + '\n';
+  write(fd, msg.c_str(), msg.length());
+  close(fd);
+}
+
+void read_file(const char *filename, FATData &data, bool do_dir_check = true) {
+  utils::Response response = utils::read_file(filename, data, do_dir_check);
+
+  if (response.status == READ_DIR_ERR) {
+    write_status_client("Ошибка: " + std::string(filename) +
+                        " является директорией");
+  } else if (response.status == READ_NO_EXISTING_FILE) {
+    std::string filename_str = filename;
+    write_status_client("Файл с именем " + filename_str + " не существует");
+  } else {
+    write_status_client(response.result);
+  }
+}
+
+void delete_block(Block &block, FATData &data) {
+  data.empty_blocks.push_back(block);
+}
+
+void write_block(std::string block, long long pos_start) {
+  // std::cout << "Block: " << block << "\n";
+
+  std::fstream file;
+  file.open(MEMORY_PATH, std::ios::in | std::ios::out | std::ios::binary);
+  file.seekp(pos_start);
+  file.write(block.c_str(), BLK_SIZE);
+  file.close();
+}
+
+bool file_already_exists(const std::string &filename, FATData &data,
+                         FileType requested_type,
+                         bool strict_type_check = true) {
+  auto it = data.files.find(filename);
+  if (it != data.files.end()) {
+    if (strict_type_check && it->second.type != requested_type) {
+      return false;
+    }
+    return true;
+  }
+  return false;
+}
+
+bool is_valid_name(std::string &filename) {
+  if (filename[0] != '/') {
+    return false;
+  }
+  return true;
+}
+
+bool all_filepath_unit_exist(FATData &data, std::string filepath) {
+  std::string full_unit_path;
+  filepath.erase(0, 1); // delete first '/'
+  while (filepath.find('/') != filepath.npos) {
+    size_t slash_pos = filepath.find('/');
+    std::string filepath_unit = filepath.substr(0, slash_pos);
+    filepath.erase(0, slash_pos + 1);
+    full_unit_path += "/" + filepath_unit;
+    if (!file_already_exists(full_unit_path, data, FileType::DIR)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void _write_file(std::string filepath_str, std::string text, FATData &data,
+                 FileType type = FileType::FILE) {
+  std::string whole_input = text;
+
+  int blocks_cnt = whole_input.length() / BLK_SIZE;
+  if (whole_input.length() % BLK_SIZE != 0) {
+    blocks_cnt++;
+  }
+
+  FileInfo &fileinfo = data.files[filepath_str];
+  fileinfo.name = filepath_str;
+  fileinfo.type = type;
+  fileinfo.data.clear();
+
+  for (int i = 0; i < blocks_cnt; i++) {
+    std::string block_str = whole_input.substr(i * BLK_SIZE, BLK_SIZE);
+
+    if (data.empty_blocks.size() > 0) {
+      long long start = data.empty_blocks[0].start;
+      write_block(block_str, start);
+
+      Block block{start, start + BLK_SIZE - 1};
+      fileinfo.data.push_back(block);
+
+      data.empty_blocks.erase(data.empty_blocks.begin());
+    } else {
+      long long start = data.start_free_memory;
+      write_block(block_str, start);
+
+      Block block{start, start + BLK_SIZE - 1};
+      fileinfo.data.push_back(block);
+
+      data.start_free_memory += BLK_SIZE;
+    }
+  }
+}
+
+std::string get_parent_dir_path(std::string &filepath) {
+  size_t slash_pos = filepath.rfind('/');
+  std::string dirpath = filepath.substr(0, slash_pos);
+  if (dirpath.empty()) {
+    dirpath = "/";
+  }
+  return dirpath;
+}
+
+std::string get_basename(std::string &filepath) {
+  size_t slash_pos = filepath.rfind('/');
+  std::string dirpath = filepath.substr(slash_pos + 1, filepath.npos);
+  return dirpath;
+}
+
+void update_parent_dir_content(std::string filepath, FATData &data) {
+  std::string parent_dir = get_parent_dir_path(filepath);
+  std::string file_basename = get_basename(filepath);
+
+  auto it = data.files.find(parent_dir);
+  if (it == data.files.end()) {
+    write_status_client(
+        "Внутренняя ошибка: родительская директория не существует");
+    return;
+  }
+
+  if (it->second.type != FileType::DIR) {
+    write_status_client("Ошибка: '" + parent_dir + "' не является директорией");
+    return;
+  }
+
+  std::string parent_dir_content;
+  if (data.files.find(parent_dir) == data.files.end()) {
+    write_status_client("Внутренняя ошибка: не удаётся получить содержимое "
+                        "родительской директории.");
+    return;
+  }
+  auto file = data.files.find(parent_dir);
+  const FileInfo &parent_dir_info = file->second;
+  for (Block block : parent_dir_info.data) {
+    parent_dir_content += utils::read_block(block);
+  }
+
+  parent_dir_content += "/" + file_basename;
+
+  for (Block block : parent_dir_info.data) {
+    delete_block(block, data);
+  }
+  data.files.erase(parent_dir);
+
+  _write_file(parent_dir, parent_dir_content, data, FileType::DIR);
+}
+
+void delete_parent_dir_content(std::string filepath, FATData &data) {
+  std::string parent_dir = get_parent_dir_path(filepath);
+  std::string file_basename = get_basename(filepath);
+
+  std::string parent_dir_content;
+  if (data.files.find(parent_dir) == data.files.end()) {
+    write_status_client("Внутренняя ошибка: не удаётся получить содержимое "
+                        "родительской директории.");
+    return;
+  }
+  auto file = data.files.find(parent_dir);
+  const FileInfo &parent_dir_info = file->second;
+  for (Block block : parent_dir_info.data) {
+    parent_dir_content += utils::read_block(block);
+  }
+
+  int pos = parent_dir_content.find("/" + file_basename);
+  if (parent_dir_content.find("/" + file_basename + "/") != std::string::npos) {
+    pos = parent_dir_content.find("/" + file_basename + "/");
+  }
+  parent_dir_content.replace(pos, file_basename.size() + 1, "");
+
+  for (Block block : parent_dir_info.data) {
+    delete_block(block, data);
+  }
+  data.files.erase(parent_dir);
+
+  _write_file(parent_dir, parent_dir_content, data, FileType::DIR);
+};
+
+void create_directory(const char *dirpath, FATData &data) {
+  if (dirpath == nullptr || dirpath[0] == '\0') {
+    write_status_client("Ошибка: не указано имя директории");
+    return;
+  }
+
+  if (dirpath[std::strlen(dirpath) - 1] == '/') {
+    write_status_client("Ошибка: имя дериктории не должно заканчиваться на /");
+    return;
+  }
+
+  std::string dirpath_str = dirpath;
+  if (file_already_exists(dirpath_str, data, FileType::DIR)) {
+    write_status_client(std::string("Ошибка: директория '") + dirpath +
+                        std::string("' уже существует"));
+    return;
+  }
+
+  if (!all_filepath_unit_exist(data, dirpath)) {
+    write_status_client(
+        std::string("Ошибка: не существует какого-то из звеньев пути ") +
+        dirpath);
+    return;
+  }
+
+  update_parent_dir_content(dirpath, data);
+
+  FileInfo &dir_info = data.files[dirpath_str];
+  dir_info.name = dirpath_str;
+  dir_info.type = FileType::DIR;
+  dir_info.data.clear();
+
+  write_status_client("OK");
+}
+
+void write_file(const char *filepath, const char *text, FATData &data) {
+  if (filepath == nullptr || filepath[0] == '\0') {
+    std::cerr << "Error no filename" << std::endl;
+    write_status_client("Ошибка: не указано имя файла");
+    return;
+  }
+  if (filepath[std::strlen(filepath) - 1] == '/') {
+    write_status_client("Ошибка: имя дериктории не должно заканчиваться на /");
+    return;
+  }
+
+  std::string filepath_str = filepath;
+  if (file_already_exists(filepath_str, data, FileType::FILE)) {
+    write_status_client("Ошибка: файл '" + filepath_str + "' уже существует");
+    return;
+  };
+
+  if (!all_filepath_unit_exist(data, filepath)) {
+    write_status_client(
+        std::string("Ошибка: не существует какого-то из звеньев пути ") +
+        filepath);
+    return;
+  }
+
+  update_parent_dir_content(filepath_str, data);
+  _write_file(filepath_str, text, data);
+
+  write_status_client("OK");
+}
+
+std::string recursive_find_all_files_to_delete(std::string dirpath,
+                                               FATData &data) {
+
+  utils::Response response = utils::read_file(dirpath.c_str(), data, false);
+  std::string file_list;
+  std::string dir_list;
+  std::string dir_path = dirpath;
+  std::stringstream ss(response.result);
+  std::string file_system_object; // file, directory, etc.
+  std::string result;
+
+  if (dir_path.back() != '/') {
+    dir_path += '/';
+  }
+
+  while (std::getline(ss, file_system_object, '/')) {
+    if (file_system_object.empty()) {
+      continue;
+    }
+
+    std::string full_path = dir_path + file_system_object;
+
+    if (data.files.find(full_path) == data.files.end()) {
+      full_path = dir_path + file_system_object + "/";
+      if (data.files.find(full_path) == data.files.end()) {
+        continue;
+      }
+    }
+
+    auto it = data.files.find(full_path);
+    FileType obj_type = it->second.type;
+    if (obj_type == FileType::FILE) {
+      result += dir_path + file_system_object + "|";
+    } else {
+      result += dir_path + file_system_object + "|";
+      result += recursive_find_all_files_to_delete(
+          dir_path + file_system_object, data);
+    }
+  }
+
+  return result;
+}
+
+// delete /d1
+int delete_file(const char *filename, FATData &data) {
+  std::string filename_str = filename;
+  if (filename_str == "/") {
+    write_status_client("Нельзя удалить /");
+  }
+  if (data.files.find(filename_str) == data.files.end()) {
+    write_status_client("Файл/директория с именем " + filename_str +
+                        " не существует");
+    return 1;
+  }
+
+  FileInfo file_info = data.files[filename];
+  std::vector<std::string> files_to_delete;
+  files_to_delete.push_back(filename); // сам файл
+
+  if (!file_info.data.empty() && file_info.type == FileType::DIR) {
+    std::string input = recursive_find_all_files_to_delete(filename_str, data);
+    std::cout << input << std::endl;
+    std::stringstream ss(input);
+    // |d1|f1|f2|
+    std::string token;
+    while (std::getline(ss, token, '|')) {
+      if (token != std::string(filename)) { // добавляю все нижние файлы
+        files_to_delete.push_back(token);
+      }
+    }
+  }
+
+  for (int i = files_to_delete.size() - 1; i >= 0; i--) {
+    std::string file_to_delete_name = files_to_delete[i];
+    FileInfo file_to_delete_info = data.files[file_to_delete_name];
+    for (Block block : file_to_delete_info.data) {
+      delete_block(block, data);
+    }
+    delete_parent_dir_content(file_to_delete_name, data);
+    data.files.erase(file_to_delete_name);
+  }
+
+  write_status_client("OK");
+  return 0;
+}
+
+int edit_file(const char *filename, const char *text, FATData &data,
+              bool do_user_checks = true) {
+  std::string filename_str = filename;
+
+  auto it = data.files.find(filename_str);
+  if (it == data.files.end()) {
+    write_status_client("Файл с именем " + filename_str + " не существует");
+    return 1;
+  }
+
+  if (do_user_checks && it->second.type != FileType::FILE) {
+    write_status_client("Ошибка: " + filename_str +
+                        " является директорией, а не файлом");
+    return 1;
+  }
+
+  FileInfo file_to_delete = data.files[filename_str];
+  for (Block block : file_to_delete.data) {
+    delete_block(block, data);
+  }
+  data.files.erase(filename_str);
+
+  delete_parent_dir_content(filename, data);
+  write_file(filename, text, data);
+  return 0;
+}
+
+void list_files(const char *filepath, FATData &data) {
+  utils::ListResponse answer = utils::list_files(filepath, data);
+  if (answer.status == OK && answer.result.empty()) {
+    write_status_client("Пусто!");
+  }
+
+  if (answer.status == LS_NO_EXISTING_DIR && answer.result.empty()) {
+    std::string filename_str = filepath;
+    write_status_client("Файл с именем " + filename_str + " не существует");
+  }
+
+  std::string result = "";
+  for (std::string x : answer.result)
+    result += x;
+  write_status_client(result);
+}
+
+std::string cout_recursive_(FATData &data, std::string dirpath, int depth) {
+  std::string result;
+
+  std::string indent;
+  for (int i = 0; i < depth; i++) {
+    if (i == depth - 1) {
+      indent += "|-";
+    } else {
+      indent += "| ";
+    }
+  }
+
+  utils::ListResponse answer = utils::list_files(dirpath.c_str(), data);
+
+  for (std::string s : answer.result) {
+    if (!s.empty()) {
+      if (s[s.length() - 1] == '/') {
+        std::string name_without_slash = s.substr(0, s.length() - 1);
+        result += indent + s + " D\n";
+
+        std::string new_path;
+        if (dirpath == "/") {
+          new_path = dirpath + name_without_slash;
+        } else {
+          new_path = dirpath + "/" + name_without_slash;
+        }
+
+        result += cout_recursive_(data, new_path, depth + 1);
+      } else {
+        result += indent + s + " F\n";
+      }
+    }
+  }
+
+  return result;
+}
+
+void cout_recursive(FATData &data, std::string dirpath, int depth = 0) {
+  auto file = data.files.find(dirpath);
+
+  if (file == data.files.end()) {
+    write_status_client(std::string("Ошибка: нет такой дериктории ") + dirpath);
+    return;
+  }
+  if (data.files[dirpath].type != FileType::DIR) {
+    write_status_client("Ошибка: " + dirpath + " не является директорией");
+    return;
+  }
+
+  if (!all_filepath_unit_exist(data, dirpath)) {
+    write_status_client(
+        std::string("Ошибка: не существует какого-то из звеньев пути ") +
+        dirpath);
+    return;
+  }
+
+  utils::TreeResponse response = utils::tree(data, dirpath);
+  std::string result;
+
+  for (auto [dir, content] : response.result) {
+    result += dir + ": ";
+    for (std::string child : content) {
+      result += child + ", ";
+    }
+    result += "\n";
+  }
+
+  if (result.empty()) {
+    write_status_client("пусто");
+  } else {
+    write_status_client(result);
+  }
+}
+
+void move_file(FATData &data, std::string filepath_new,
+               std::string filepath_old) {
+  auto it = data.files.find(filepath_old);
+  if (it == data.files.end()) {
+    write_status_client(std::string("Ошибка: нет такого файла ") +
+                        filepath_old);
+    return;
+  }
+  if (data.files[filepath_old].type == FileType::DIR) {
+    write_status_client("Ошибка: " + filepath_old + " является директорией");
+    return;
+  }
+
+  if (!all_filepath_unit_exist(data, filepath_old)) {
+    write_status_client(
+        std::string(
+            "Ошибка: не существует какого-то из звеньев в старом пути  ") +
+        filepath_old);
+    return;
+  }
+
+  if (!all_filepath_unit_exist(
+          data, filepath_new.substr(0, filepath_new.find_last_of('/')))) {
+    write_status_client(
+        std::string(
+            "Ошибка: не существует какого-то из звеньев в старом пути  ") +
+        filepath_old);
+    return;
+  }
+
+  if (filepath_new.substr(filepath_new.find_last_of('/'),
+                          filepath_new.size()) == "") {
+    write_status_client("Ошибка: имя конечного файла не должно быть пустым");
+    return;
+  }
+  if (!filepath_new.empty() &&
+      filepath_new.substr(filepath_new.size() - 1) == "/") {
+    write_status_client("Ошибка: нельзя переместить файл в директорию, укажите "
+                        "новое имя файла");
+    return;
+  }
+  if (data.files.find(filepath_new) != data.files.end()) {
+    write_status_client(
+        "Ошибка: нельзя переместить на место дериктории или другого файла");
+    return;
+  }
+
+  FileInfo file_info = std::move(it->second);
+  file_info.name = filepath_new;
+
+  delete_parent_dir_content(filepath_old, data);
+  data.files.erase(it);
+
+  data.files[filepath_new] = std::move(file_info);
+  update_parent_dir_content(filepath_new, data);
+  write_status_client("Файл перемещён: " + filepath_old + " -> " +
+                      filepath_new);
+}
+
+void move_directory(FATData &data, std::string filepath_new,
+                    std::string filepath_old) {
+  auto it = data.files.find(filepath_old);
+  if (it == data.files.end()) {
+    write_status_client(std::string("Ошибка: нет такого файла ") +
+                        filepath_old);
+    return;
+  }
+  if (data.files[filepath_old].type == FileType::FILE) {
+    write_status_client("Ошибка: " + filepath_old + " является файлом");
+    return;
+  }
+
+  if (!all_filepath_unit_exist(data, filepath_old)) {
+    write_status_client(
+        std::string(
+            "Ошибка: не существует какого-то из звеньев в старом пути  ") +
+        filepath_old);
+    return;
+  }
+
+  if (!all_filepath_unit_exist(
+          data, filepath_new.substr(0, filepath_new.find_last_of('/')))) {
+    write_status_client(
+        std::string(
+            "Ошибка: не существует какого-то из звеньев в старом пути  ") +
+        filepath_old);
+    return;
+  }
+
+  if (filepath_new.substr(filepath_new.find_last_of('/'),
+                          filepath_new.size()) == "") {
+    write_status_client("Ошибка: имя конечного файла не должно быть пустым");
+    return;
+  }
+  if (!filepath_new.empty() &&
+      filepath_new.substr(filepath_new.size() - 1) == "/") {
+    write_status_client("Ошибка: нельзя переместить файл в директорию, укажите "
+                        "новое имя файла");
+    return;
+  }
+  if (data.files.find(filepath_new) != data.files.end()) {
+    write_status_client(
+        "Ошибка: нельзя переместить на место дериктории или другого файла");
+    return;
+  }
+
+  FileInfo file_info = std::move(it->second);
+  file_info.name = filepath_new;
+
+  delete_parent_dir_content(filepath_old, data);
+  data.files.erase(it);
+
+  data.files[filepath_new] = std::move(file_info);
+  update_parent_dir_content(filepath_new, data);
+  write_status_client("Файл перемещён: " + filepath_old + " -> " +
+                      filepath_new);
+}
+
+void prepare_FAT(FATData &data) {
+  std::string root = "/";
+  if (data.files.find(root) == data.files.end()) {
+    FileInfo &fileinfo = data.files[root];
+    fileinfo.name = root;
+    fileinfo.type = FileType::DIR;
+    fileinfo.data.clear();
+  }
+}
+===== Файл: ./tests/daemon/tests.cpp =====
+#include "../../daemon/model/fat_data.hpp"
+#include "../../daemon/utils/utils.hpp"
+#include <algorithm>
+#include <fstream>
+#include <gtest/gtest.h>
+#include <iostream>
+#include <string>
+#include <vector>
+
+void write_file(const char *filepath, const char *text, FATData &data);
+void prepare_FAT(FATData &data);
+utils::Response utils::read_file(const char *filename, FATData &data,
+                                 bool do_dir_check);
+int delete_file(const char *filename, FATData &data);
+int edit_file(const char *filename, const char *text, FATData &data,
+              bool do_user_checks = true);
+void create_directory(const char *dirpath, FATData &data);
+
+utils::ListResponse utils::list_files(const char *filepath, FATData &data);
+
+const char *file_path = "/f1";
+const char *file_content = "f1content";
+const char *new_content = "new_content";
+const char *dirpath1 = "/dir1";
+const char *dirpath2 = "/dir2";
+const char *dirpath3 = "/dir3";
+const char *file_path2 = "/f2";
+
+class FileSystemTest : public ::testing::Test {
+protected:
+  FATData data;
+  void SetUp() override {
+    data.empty_blocks.clear();
+    data.files.clear();
+    data.start_free_memory = 0;
+    prepare_FAT(data);
+    // создаём пустую фат-дату и пустую мемор
+    system("dd if=/dev/zero bs=1 of=test_memory count=1024 status=none");
+  }
+
+  void TearDown() override {
+    // чистим фат-дату и мемори
+  }
+};
+
+TEST_F(FileSystemTest, CheckFATDataUpdated) {
+  write_file(file_path, file_content, data);
+
+  EXPECT_NE(data.files.find(file_path), data.files.end());
+  FileInfo file_info = data.files[file_path];
+  EXPECT_EQ(file_info.name, file_path);
+  EXPECT_EQ(file_info.type, FileType::FILE);
+}
+
+TEST_F(FileSystemTest, CheckUpdateMemory) {
+  write_file(file_path, file_content, data);
+  std::ifstream memory_test("./test_memory", std::ios::binary);
+  char output[100];
+  memory_test.read(output, sizeof(output));
+  std::string result;
+  for (int i = 0; i < 100; i++) {
+    if (output[i] != '\0') {
+      result += output[i];
+    }
+  }
+  ASSERT_EQ(result, std::string(file_path) + std::string(file_content));
+  memory_test.close();
+};
+
+TEST_F(FileSystemTest, CheckFATDataUpdatedAndMemory) {
+  write_file(file_path, file_content, data);
+  utils::Response result = utils::read_file(file_path, data, false);
+  ASSERT_EQ(OK, result.status);
+  EXPECT_EQ(std::string(file_content), result.result);
+}
+
+TEST_F(FileSystemTest, EditFileTestMemory) {
+  write_file(file_path, file_content, data);
+  edit_file(file_path, "new_content", data);
+  std::ifstream memory_test("./test_memory", std::ios::binary);
+
+  char output[100];
+  memory_test.read(output, sizeof(output));
+  std::string result;
+  for (int i = 0; i < 100; i++) {
+    if (output[i] != '\0') {
+      result += output[i];
+    }
+  }
+  std::string file_path_and_new_content =
+      std::string(file_path) + std::string(new_content);
+
+  std::string sorted_result = result;
+  std::string sorted_file_path_and_new_content = file_path_and_new_content;
+
+  std::sort(sorted_result.begin(), sorted_result.end());
+  std::sort(sorted_file_path_and_new_content.begin(),
+            sorted_file_path_and_new_content.end());
+
+  ASSERT_EQ(sorted_result, sorted_file_path_and_new_content);
+  memory_test.close();
+};
+
+TEST_F(FileSystemTest, ListRootDirectory) {
+  write_file(file_path, file_content, data);
+  utils::ListResponse response = utils::list_files("/", data);
+
+  ASSERT_EQ(response.status, OK);
+  std::vector<std::string> result = response.result;
+  std::string list_file = file_path;
+  list_file.erase(0, 1);
+  EXPECT_EQ(result.size(), 1);
+  EXPECT_EQ(result[0], list_file);
+};
+
+TEST_F(FileSystemTest, ListNotExistingDirectory) {
+  utils::ListResponse response =
+      utils::list_files("/not_existing_directory", data);
+  ASSERT_EQ(response.status, LS_NO_EXISTING_DIR);
+}
+
+TEST_F(FileSystemTest, CheckDeleteFileFromFat) {
+  delete_file(file_path, data);
+  EXPECT_EQ(data.files.find(file_path), data.files.end());
+};
+
+TEST_F(FileSystemTest, MakeDirectory) {
+  create_directory(dirpath1, data);
+  ASSERT_NE(data.files.find(dirpath1), data.files.end());
+  FileInfo dir_info = data.files[dirpath1];
+
+  EXPECT_EQ(dir_info.name, dirpath1);
+  EXPECT_EQ(dir_info.type, FileType::DIR);
+};
+
+TEST_F(FileSystemTest, DeleteDir) {
+  delete_file(dirpath1, data);
+  ASSERT_EQ(data.files.find(dirpath1), data.files.end());
+}
+
+TEST_F(FileSystemTest, LsTest1) {
+  create_directory(dirpath1, data);
+  create_directory((std::string(dirpath1) + std::string(dirpath2)).c_str(),
+                   data);
+  create_directory((std::string(dirpath1) + std::string(dirpath3)).c_str(),
+                   data);
+  utils::ListResponse response = utils::list_files(dirpath1, data);
+  std::string reformed_d2 =
+      std::string(dirpath2).substr(1, std::string(dirpath2).size() - 1) + "/";
+  std::string reformed_d3 =
+      std::string(dirpath3).substr(1, std::string(dirpath3).size() - 1) + "/";
+  EXPECT_EQ(response.result[0], reformed_d2);
+  EXPECT_EQ(response.result[1], reformed_d3);
+}
+
+TEST_F(FileSystemTest, LsTest2) {
+  create_directory(dirpath1, data);
+  create_directory((std::string(dirpath1) + std::string(dirpath2)).c_str(),
+                   data);
+  create_directory((std::string(dirpath1) + std::string(dirpath3)).c_str(),
+                   data);
+  std::string reformed_d3 =
+      std::string(dirpath3).substr(1, std::string(dirpath3).size() - 1) + "/";
+
+  delete_file((std::string(dirpath1) + std::string(dirpath2)).c_str(), data);
+  utils::ListResponse response = utils::list_files(dirpath1, data);
+  EXPECT_EQ(response.result[0], reformed_d3);
+}
+
+TEST_F(FileSystemTest, LsTest3) {
+  create_directory(dirpath1, data);
+  write_file((std::string(dirpath1) + std::string(file_path)).c_str(),
+             file_content, data);
+  write_file((std::string(dirpath1) + std::string(file_path2)).c_str(),
+             file_content, data);
+  utils::ListResponse response = utils::list_files(dirpath1, data);
+
+  std::string reformed_f1 =
+      std::string(file_path).substr(1, std::string(file_path).size() - 1);
+  std::string reformed_f2 =
+      std::string(file_path2).substr(1, std::string(file_path2).size() - 1);
+
+  EXPECT_EQ(response.result[0], reformed_f1);
+  EXPECT_EQ(response.result[1], reformed_f2);
+}
+
+TEST_F(FileSystemTest, FileEndCorrectSimbol) {
+  create_directory((std::string(dirpath1) + "/").c_str(), data);
+  EXPECT_EQ(data.files.find(dirpath1), data.files.end());
+}
+
+TEST_F(FileSystemTest, DirEndCorrectSimbol) {
+  create_directory((std::string(dirpath1) + "/").c_str(), data);
+  EXPECT_EQ(data.files.find(dirpath1), data.files.end());
+}
+
+int main(int argc, char **argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  int result = RUN_ALL_TESTS();
+  return result;
+}
+===== Файл: ./tests/daemon/constants.cpp =====
+#include "../../daemon/constants.hpp"
+
+const int BLK_SIZE = 2;
+const char *FAT_PATH = "FAT";
+const char *fifo_path = "../../myfifo";
+const char *fifo_path_client = "../../server_fifo";
+const char *MEMORY_PATH = "./test_memory";
