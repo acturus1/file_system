@@ -44,28 +44,84 @@ int main() {
         user_input.push_back(word);
       }
 
-      std::cout << user_input[0] << std::endl;
-      if (user_input[0] == "write") {
-        write_file(user_input[1].c_str(), user_input[2].c_str(), data);
-      } else if (user_input[0] == "mkdir") {
-        create_directory(user_input[1].c_str(), data);
-      } else if (user_input[0] == "delete") {
-        delete_file(user_input[1].c_str(), data);
-      } else if (user_input[0] == "edit") {
-        edit_file(user_input[1].c_str(), user_input[2].c_str(), data);
-      } else if (user_input[0] == "read") {
-        read_file(user_input[1].c_str(), data);
-      } else if (user_input[0] == "ls") {
-        list_files(user_input[1].c_str(), data);
-      } else if (user_input[0] == "tree") {
-        cout_recursive(data, user_input[1].c_str(), 0);
-      } else if (user_input[0] == "move") {
-        move_file(data, user_input[1].c_str(), user_input[2].c_str());
+      if (user_input.empty()) {
+        write_status_client("Ошибка: пустая команда");
+        continue;
+      }
+
+      const std::string &cmd = user_input[0];
+
+      if (cmd == "write") {
+        if (user_input.size() < 3) {
+          write_status_client("Ошибка: использование: write <путь> <текст>");
+        } else {
+          std::string text;
+          for (size_t i = 2; i < user_input.size(); ++i) {
+            if (i > 2)
+              text += ' ';
+            text += user_input[i];
+          }
+          write_file(user_input[1].c_str(), text.c_str(), data);
+        }
+
+      } else if (cmd == "mkdir") {
+        if (user_input.size() < 2) {
+          write_status_client("Ошибка: использование: mkdir <путь>");
+        } else {
+          create_directory(user_input[1].c_str(), data);
+        }
+
+      } else if (cmd == "delete") {
+        if (user_input.size() < 2) {
+          write_status_client("Ошибка: использование: delete <путь>");
+        } else {
+          delete_file(user_input[1].c_str(), data);
+        }
+
+      } else if (cmd == "edit") {
+        if (user_input.size() < 3) {
+          write_status_client("Ошибка: использование: edit <путь> <текст>");
+        } else {
+          std::string text;
+          for (size_t i = 2; i < user_input.size(); ++i) {
+            if (i > 2)
+              text += ' ';
+            text += user_input[i];
+          }
+          edit_file(user_input[1].c_str(), text.c_str(), data);
+        }
+
+      } else if (cmd == "read") {
+        if (user_input.size() < 2) {
+          write_status_client("Ошибка: использование: read <путь>");
+        } else {
+          read_file(user_input[1].c_str(), data);
+        }
+
+      } else if (cmd == "ls") {
+        if (user_input.size() < 2) {
+          write_status_client("Ошибка: использование: ls <путь>");
+        } else {
+          list_files(user_input[1].c_str(), data);
+        }
+
+      } else if (cmd == "tree") {
+        if (user_input.size() < 2) {
+          write_status_client("Ошибка: использование: tree <путь>");
+        } else {
+          cout_recursive(data, user_input[1].c_str(), 0);
+        }
+
+      } else if (cmd == "move") {
+        if (user_input.size() < 3) {
+          write_status_client(
+              "Ошибка: использование: move <новый_путь> <старый_путь>");
+        } else {
+          move_file(data, user_input[1].c_str(), user_input[2].c_str());
+        }
+
       } else {
         write_status_client("Неизвестная команда!");
-      }
-      if (buffer[bytes_read - 1] != '\n') {
-        std::cout << std::endl;
       }
     }
   }
